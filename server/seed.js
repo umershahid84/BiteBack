@@ -8,6 +8,7 @@ const config = require('./config');
 const { openDatabase, transaction } = require('./db');
 const { hashPassword } = require('./auth');
 const { lookupZip } = require('./areas');
+const { createLegal } = require('./legal/documents');
 
 const DEMO_PASSWORD = 'BiteBack123';
 
@@ -190,6 +191,16 @@ function main() {
         .run(ids[user], item.id, item.image_path, item.name, item.description, reason, item.dietary, item.price_cents,
           pct, qty, qty, start.toISOString(), end.toISOString());
     });
+
+    // Demo accounts have accepted the current terms (recorded like a real sign-up).
+    const legal = createLegal(config);
+    for (const u of db.prepare('SELECT id, role FROM users').all()) {
+      for (const d of legal.required(u.role)) {
+        if (!db.prepare('SELECT 1 FROM terms_acceptances WHERE user_id = ? AND document = ? AND version = ?').get(u.id, d.id, d.version)) {
+          db.prepare("INSERT INTO terms_acceptances (user_id, document, version, ip, user_agent) VALUES (?, ?, ?, 'seed', 'npm run seed')").run(u.id, d.id, d.version);
+        }
+      }
+    }
   });
 
   console.log('Seeded demo data.');

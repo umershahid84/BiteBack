@@ -9,3 +9,4 @@ class HttpError extends Error {
 const bad = (msg) => new HttpError(400, msg);
 
 module.exports = { HttpError, bad };
+

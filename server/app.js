@@ -6,6 +6,8 @@ const { HttpError } = require('./errors');
 const { createImageStore } = require('./images');
 const { createReceiptService } = require('./receipts');
 const { lookupZip } = require('./areas');
+const { createLegal } = require('./legal/documents');
+const { createTermsService } = require('./terms');
 
 const CSP = [
   "default-src 'self'",
@@ -42,7 +44,9 @@ function createApp({ db, config, payments }) {
   const orders = createOrderService({ db, config, payments });
   const images = createImageStore(config.uploadsDir || path.join(__dirname, '..', 'data', 'uploads'));
   const receipts = createReceiptService({ db, config });
-  const deps = { db, config, payments, sessions, orders, images, receipts };
+  const legal = createLegal(config);
+  const terms = createTermsService({ db, legal });
+  const deps = { db, config, payments, sessions, orders, images, receipts, legal, terms };
 
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');
@@ -73,6 +77,8 @@ function createApp({ db, config, payments }) {
   });
 
   app.use('/api/auth', require('./routes/auth')(deps));
+  app.use('/api/legal', require('./routes/legal').api(deps));
+  app.use('/legal', require('./routes/legal').pages(deps));
   app.use('/api/restaurant', require('./routes/restaurant')(deps));
   app.use('/api', require('./routes/customer')(deps));
 
@@ -86,7 +92,7 @@ function createApp({ db, config, payments }) {
     const status = err.status || err.statusCode || 500;
     if (status >= 500) console.error(err);
     const message = status >= 500 && !(err instanceof HttpError) ? 'Something went wrong. Please try again.' : err.message;
-    res.status(status).json({ error: message });
+    res.status(status).json(err.code && typeof err.code === 'string' && status < 500 ? { error: message, code: err.code } : { error: message });
   });
 
   return { app, orders };

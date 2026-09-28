@@ -1,4 +1,5 @@
 import { api, $, $$, renderHeader, showError, withBusy, getMe, homeFor } from './common.js';
+import { askToAccept } from './agreement.js';
 
 renderHeader('login');
 const msg = $('#msg');
@@ -52,7 +53,25 @@ if (signupForm) {
     }
     withBusy($('button[type=submit]', signupForm), async () => {
       try {
-        const { user } = await api('/auth/signup', { method: 'POST', body });
+        // 1) Check the details first, so any problem is shown before the agreement.
+        await api('/auth/signup', { method: 'POST', body: { ...body, dryRun: true } });
+        showError(msg, null);
+        // 2) Show the agreement. Declining creates nothing.
+        const accepted = await askToAccept({
+          role,
+          title: role === 'restaurant' ? 'Restaurant Partner Agreement' : 'Terms of Service',
+          intro: 'Please read and accept these terms to create your BiteBack account. If you decline, no account will be created.',
+          acceptLabel: 'Accept & create account',
+        });
+        if (!accepted) {
+          msg.innerHTML = `<div class="alert alert-warn" role="status"><b>No account was created.</b> You declined the terms. You can review them any time
+            (<a href="/legal/${role === 'restaurant' ? 'restaurant-agreement' : 'customer-terms'}" target="_blank" rel="noopener">${role === 'restaurant' ? 'Partner Agreement' : 'Terms'}</a>,
+            <a href="/legal/privacy" target="_blank" rel="noopener">Privacy Policy</a>) and sign up when you're ready.</div>`;
+          msg.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          return;
+        }
+        // 3) Create the account together with the acceptance record.
+        const { user } = await api('/auth/signup', { method: 'POST', body: { ...body, acceptedTerms: accepted } });
         location.href = homeFor(user);
       } catch (err) {
         showError(msg, err);

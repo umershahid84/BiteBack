@@ -4,9 +4,9 @@ const { HttpError, bad } = require('../errors');
 const { requireRole, createLimiter } = require('../auth');
 const { lookupZip } = require('../areas');
 
-module.exports = function restaurantRoutes({ db, orders, images, receipts }) {
+module.exports = function restaurantRoutes({ db, orders, images, receipts, terms }) {
   const router = express.Router();
-  router.use(requireRole('restaurant'));
+  router.use(requireRole('restaurant'), terms.gate);
 
   // 4-digit PINs are guessable by brute force, so cap failed lookups per restaurant.
   const pinLimiter = createLimiter({ max: 15, windowMs: 10 * 60 * 1000 });
@@ -92,15 +92,34 @@ module.exports = function restaurantRoutes({ db, orders, images, receipts }) {
 
   // ---- Offers ----
 
+  const MIN_TIMER = 5;
+  const MAX_TIMER = 72 * 60;
+
   // An offer is a discounted menu item: name, menu price, dietary tags and photo come from the menu.
   function parseOffer(req, existing) {
     const b = req.body || {};
     const item = ownMenuItem(req, b.menuItemId);
-    const pickupStart = v.isoDate(b.pickupStart, 'Pickup start');
-    const pickupEnd = v.isoDate(b.pickupEnd, 'Pickup end');
-    if (pickupEnd <= pickupStart) throw bad('Pickup end must be after pickup start.');
-    if (!existing && pickupEnd <= new Date()) throw bad('Pickup end must be in the future.');
-    if (pickupEnd - Date.now() > 72 * 3600 * 1000) throw bad('Pickup must end within 3 days.');
+    // Discard timer: the offer is available now and expires after N minutes, when the restaurant
+    // discards whatever is left. (An exact pickupStart/pickupEnd is also accepted.)
+    let pickupStart;
+    let pickupEnd;
+    const now = new Date();
+    if (b.expiresInMinutes !== undefined && b.expiresInMinutes !== null && b.expiresInMinutes !== '') {
+      const minutes = v.int(Number(b.expiresInMinutes), 'Discard timer (minutes)', { min: MIN_TIMER, max: MAX_TIMER });
+      pickupStart = existing && new Date(existing.pickup_start) < now ? new Date(existing.pickup_start) : now;
+      pickupEnd = new Date(now.getTime() + minutes * 60000);
+    } else if (b.pickupEnd) {
+      pickupStart = b.pickupStart ? v.isoDate(b.pickupStart, 'Pickup start') : now;
+      pickupEnd = v.isoDate(b.pickupEnd, 'Pickup end');
+    } else if (existing) {
+      pickupStart = new Date(existing.pickup_start);
+      pickupEnd = new Date(existing.pickup_end);
+    } else {
+      throw bad('Please set the discard timer.');
+    }
+    if (pickupEnd <= pickupStart) throw bad('The timer must end after pickup starts.');
+    if (!existing && pickupEnd <= now) throw bad('The timer must end in the future.');
+    if (pickupEnd - now > MAX_TIMER * 60000) throw bad('The timer can be at most 3 days.');
     const reason = String(b.reason || '');
     if (!v.OFFER_REASONS[reason]) throw bad('Please choose why this food is available.');
     return {
@@ -158,6 +177,19 @@ module.exports = function restaurantRoutes({ db, orders, images, receipts }) {
       .run(o.menuItemId, o.imagePath, o.title, o.description, o.reason, o.dietary, o.originalPriceCents, o.discountPct, o.quantityTotal,
         o.quantityTotal - committed, o.pickupStart, o.pickupEnd, existing.id);
     db.prepare(`UPDATE orders SET pickup_end = ? WHERE offer_id = ? AND status IN ('pending_payment', 'reserved')`).run(o.pickupEnd, existing.id);
+    res.json({ offer: db.prepare('SELECT * FROM offers WHERE id = ?').get(existing.id) });
+  });
+
+  // Adds time to a running discard timer (e.g. "+30 min").
+  router.post('/offers/:id/extend', (req, res) => {
+    const existing = ownOffer(req);
+    if (existing.status === 'ended') throw new HttpError(409, 'This offer has already ended. Post it again to restart the timer.');
+    const minutes = v.int(Number(req.body?.minutes), 'Minutes', { min: 5, max: 12 * 60 });
+    const base = Math.max(Date.now(), Date.parse(existing.pickup_end));
+    const end = new Date(base + minutes * 60000);
+    if (end - Date.now() > MAX_TIMER * 60000) throw bad('The timer can be at most 3 days.');
+    db.prepare('UPDATE offers SET pickup_end = ? WHERE id = ?').run(end.toISOString(), existing.id);
+    db.prepare(`UPDATE orders SET pickup_end = ? WHERE offer_id = ? AND status IN ('pending_payment', 'reserved')`).run(end.toISOString(), existing.id);
     res.json({ offer: db.prepare('SELECT * FROM offers WHERE id = ?').get(existing.id) });
   });
 

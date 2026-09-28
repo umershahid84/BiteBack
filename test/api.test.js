@@ -27,6 +27,8 @@ async function setup() {
   function client() {
     let cookie = '';
     return async (path, { method = 'GET', body, csrf = true } = {}) => {
+      // Sign-ups accept the current terms unless a test says otherwise.
+      if (path === '/auth/signup' && body && !('acceptedTerms' in body)) body = { ...body, acceptedTerms: termsFor(body.role) };
       const res = await fetch(base + path, {
         method,
         headers: { 'content-type': 'application/json', cookie, ...(csrf ? { 'x-requested-with': 'BiteBack' } : {}) },
@@ -48,6 +50,9 @@ async function menuItem(shop, name, price, extra = {}) {
   assert.equal(r.status, 201, JSON.stringify(r.body));
   return r.body.item.id;
 }
+
+const { REQUIRED, VERSION } = require('../server/legal/documents');
+const termsFor = (role) => Object.fromEntries(REQUIRED[role === 'restaurant' ? 'restaurant' : 'customer'].map((d) => [d, VERSION]));
 
 const card = (last4 = '4242') => ({ brand: 'visa', last4, expMonth: 12, expYear: new Date().getFullYear() + 2 });
 
@@ -417,4 +422,94 @@ test('quantity is limited only by what the restaurant made available; area searc
   for (const city of ['Des Moines', 'Kent', 'Federal Way', 'Tacoma', 'Fife', 'Olympia']) {
     assert.ok(areas.cities.some((x) => x.name === city), city);
   }
+});
+
+test('restaurant sets a discard timer; it can be extended; offer disappears when it runs out', async (t) => {
+  const env = await setup();
+  t.after(() => env.server.close());
+  const shop = env.client();
+  await shop('/auth/signup', { method: 'POST', body: {
+    role: 'restaurant', email: 'o@example.com', username: 'shop', password: 'secret123',
+    restaurant: { name: 'Shop', address: '1 Main St', city: 'Kent', zip: '98032' },
+  } });
+  const item = await menuItem(shop, 'Teriyaki', 13);
+  let r = await shop('/restaurant/offers', { method: 'POST', body: { menuItemId: item, reason: 'overproduction', discountPct: 40, quantity: 3 } });
+  assert.equal(r.status, 400, 'timer required');
+  r = await shop('/restaurant/offers', { method: 'POST', body: { menuItemId: item, reason: 'overproduction', discountPct: 40, quantity: 3, expiresInMinutes: 2 } });
+  assert.equal(r.status, 400, 'at least 5 minutes');
+
+  const before = Date.now();
+  r = await shop('/restaurant/offers', { method: 'POST', body: { menuItemId: item, reason: 'overproduction', discountPct: 40, quantity: 3, expiresInMinutes: 90 } });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const offer = r.body.offer;
+  const mins = (Date.parse(offer.pickup_end) - before) / 60000;
+  assert.ok(mins > 89.9 && mins < 90.1, `ends in ~90 min, got ${mins}`);
+  assert.ok(Date.parse(offer.pickup_start) <= Date.now(), 'available immediately');
+
+  r = await shop(`/restaurant/offers/${offer.id}/extend`, { method: 'POST', body: { minutes: 30 } });
+  assert.equal(Date.parse(r.body.offer.pickup_end) - Date.parse(offer.pickup_end), 30 * 60000);
+
+  // Editing without touching the timer keeps it.
+  r = await shop(`/restaurant/offers/${offer.id}`, { method: 'PUT', body: { menuItemId: item, reason: 'overproduction', discountPct: 50, quantity: 3 } });
+  assert.equal(r.status, 200);
+  assert.equal(Date.parse(r.body.offer.pickup_end) - Date.parse(offer.pickup_end), 30 * 60000);
+
+  const c = env.client();
+  await c('/auth/signup', { method: 'POST', body: { email: 'c@example.com', username: 'cust', password: 'password1' } });
+  r = await c('/offers');
+  assert.equal(r.body.offers.length, 1);
+
+  await env.orders.sweep(new Date(Date.now() + 3 * 3600000));
+  r = await c('/offers');
+  assert.equal(r.body.offers.length, 0, 'gone after the timer');
+  r = await shop(`/restaurant/offers/${offer.id}/extend`, { method: 'POST', body: { minutes: 30 } });
+  assert.equal(r.status, 409, 'cannot extend an ended offer');
+});
+
+test('sign-up requires accepting the terms; declining creates no account; updated terms must be re-accepted', async (t) => {
+  const env = await setup();
+  t.after(() => env.server.close());
+  const count = () => env.db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+  const c = env.client();
+  const base = { email: 'zoe@example.com', username: 'zoe', password: 'password1' };
+
+  let r = await c('/auth/signup', { method: 'POST', body: { ...base, dryRun: true, acceptedTerms: undefined } });
+  assert.equal(r.status, 200, 'form check passes');
+  assert.equal(count(), 0, 'form check creates nothing');
+
+  r = await c('/auth/signup', { method: 'POST', body: { ...base, acceptedTerms: null } });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.code, 'terms_required');
+  assert.match(r.body.error, /Customer Terms of Service and Privacy Policy/);
+  assert.equal(count(), 0, 'declined: no account');
+
+  r = await c('/auth/signup', { method: 'POST', body: { ...base, acceptedTerms: { 'customer-terms': '1999-01-01', privacy: VERSION } } });
+  assert.equal(r.status, 400, 'old version not accepted');
+  r = await c('/auth/signup', { method: 'POST', body: { ...base, role: 'restaurant', acceptedTerms: termsFor('customer'),
+    restaurant: { name: 'Zoe Cafe', address: '1 Main St', city: 'Kent', zip: '98032' } } });
+  assert.equal(r.status, 400, 'restaurants must accept the Partner Agreement');
+  assert.match(r.body.error, /Restaurant Partner Agreement/);
+  assert.equal(count(), 0);
+
+  r = await c('/auth/signup', { method: 'POST', body: base });
+  assert.equal(r.status, 201);
+  assert.deepEqual(r.body.user.pendingTerms, []);
+  const rows = env.db.prepare('SELECT document, version, ip, user_agent FROM terms_acceptances').all();
+  assert.deepEqual(rows.map((x) => x.document).sort(), ['customer-terms', 'privacy']);
+  assert.ok(rows.every((x) => x.version === VERSION && x.ip));
+
+  // Simulate a new terms version: the user is blocked until they accept it.
+  env.db.prepare("UPDATE terms_acceptances SET version = '2000-01-01'").run();
+  r = await c('/offers');
+  assert.equal(r.status, 403);
+  assert.equal(r.body.code, 'terms_required');
+  r = await c('/auth/me');
+  assert.equal(r.body.user.pendingTerms.length, 2);
+  r = await c('/auth/accept-terms', { method: 'POST', body: { acceptedTerms: termsFor('customer') } });
+  assert.equal(r.status, 200);
+  r = await c('/offers');
+  assert.equal(r.status, 200);
+
+  const page = await fetch(env.base.replace('/api', '') + '/legal/restaurant-agreement');
+  assert.match(await page.text(), /Restaurant Partner Agreement[\s\S]*Verify the PIN before handing over food/);
 });

@@ -13,6 +13,10 @@ module.exports = {
   mapAttribution: process.env.MAP_ATTRIBUTION || '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   // Darken light map tiles to match the dark UI. Set to false if your tile provider is already dark.
   mapDarkFilter: process.env.MAP_DARK_FILTER !== 'false',
+  // Company details shown in the Terms of Service, Partner Agreement and Privacy Policy.
+  legalEntityName: process.env.LEGAL_ENTITY_NAME || 'BiteBack',
+  supportEmail: process.env.SUPPORT_EMAIL || 'support@biteback.app',
+  legalAddress: process.env.LEGAL_ADDRESS || 'Seattle, Washington',
   timeZone: process.env.TIME_ZONE || 'America/Los_Angeles',
   port: int(process.env.PORT, 3000),
   uploadsDir: process.env.UPLOADS_DIR || path.join(__dirname, '..', 'data', 'uploads'),
@@ -26,6 +30,7 @@ module.exports = {
   sessionDays: 30,
   // Unpaid checkouts (e.g. waiting on 3-D Secure) are released after this many minutes.
   pendingPaymentMinutes: 15,
-  // Reserved orders not picked up this many minutes after the pickup window closes are released.
-  pickupGraceMinutes: 30,
+  // When an offer's discard timer runs out, orders not yet picked up are released (never charged)
+  // after this short grace period, for customers already at the counter.
+  pickupGraceMinutes: 10,
 };
