@@ -2,6 +2,8 @@
 // Usage: npm run seed   (adds data; safe to re-run, existing demo accounts are reused)
 process.env.TZ ||= 'America/Los_Angeles';
 
+const fs = require('node:fs');
+const path = require('node:path');
 const config = require('./config');
 const { openDatabase, transaction } = require('./db');
 const { hashPassword } = require('./auth');
@@ -18,7 +20,11 @@ const RESTAURANTS = [
   { user: 'kirklandsushi', name: 'Kirkland Sushi Bar', cuisine: 'Japanese', address: '120 Park Ln', city: 'Kirkland', zip: '98033', lat: 47.6760, lng: -122.2060, tax: 1030 },
 ];
 
-// Menus: [restaurant user, item name, description, dietary, price, demo photo]
+// Real photos for demo dishes can be dropped into public/assets/demo-food/<photo>.jpg (see README).
+const PHOTO_DIR = path.join(__dirname, '..', 'public', 'assets', 'demo-food');
+const photoPath = (name) => (fs.existsSync(path.join(PHOTO_DIR, `${name}.jpg`)) ? `/assets/demo-food/${name}.jpg` : null);
+
+// Menus: [restaurant user, item name, description, dietary, price, demo photo file name]
 const MENU = [
   ['harborpho', 'Large Beef Pho', 'Rare steak & brisket in 12-hour beef broth with rice noodles, herbs and lime.', '', 16.95, 'beef-pho'],
   ['harborpho', 'Lemongrass Tofu Banh Mi', 'Crispy lemongrass tofu, pickled carrot, cucumber and cilantro on a toasted baguette.', 'vegetarian,dairy-free', 11.5, 'tofu-banh-mi'],
@@ -84,7 +90,7 @@ function main() {
       const existing = db.prepare('SELECT id FROM menu_items WHERE restaurant_id = ? AND name = ? AND active = 1').get(ids[user], name);
       menuIds[`${user}|${name}`] = existing ? existing.id : Number(db.prepare(`
         INSERT INTO menu_items (restaurant_id, name, description, price_cents, dietary, image_path) VALUES (?, ?, ?, ?, ?, ?)`)
-        .run(ids[user], name, desc, Math.round(price * 100), dietary, `/assets/demo-food/${photo}.jpg`).lastInsertRowid);
+        .run(ids[user], name, desc, Math.round(price * 100), dietary, photoPath(photo)).lastInsertRowid);
     }
     const now = Date.now();
     const hour = 3600 * 1000;

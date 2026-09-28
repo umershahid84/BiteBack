@@ -21,6 +21,17 @@ BiteBack is a marketplace where restaurants in greater Seattle sell food that wo
 5. When a customer arrives, enter their PIN under **Verify pickup**, check the order, then press **Hand over food & charge**. That captures the payment.
 6. The dashboard shows orders awaiting pickup, order history and meals rescued/sales.
 
+**Receipts:** every order has a full receipt showing:
+- the BiteBack logo and receipt number
+- the restaurant's name, address and phone, and the customer
+- the item, quantity, ~~original price~~, discount % and new price
+- savings, service fee, WA sales tax and total
+- the card used, payment status, amount charged and transaction ID
+
+Customers can view it (My orders → View receipt), **print** it, or **download it as a PDF**.
+
+**Daily report (restaurants):** Dashboard → 📄 Daily report. Pick a day to see food sales, orders picked up, meals rescued, discounts given, sales tax collected and total charged, plus every order. **Print** it, or download it as **PDF** or **CSV** (opens in Excel/Sheets). Days use Pacific Time (`TIME_ZONE`).
+
 **Automatic cleanup:** unfinished checkouts are released after 15 minutes. Orders not picked up within 30 minutes of the pickup window closing are released **without charging the customer**. Expired offers are closed.
 
 ## Payments: authorize now, charge at pickup
@@ -59,7 +70,7 @@ Demo logins after seeding (password `BiteBack123`):
 - Customer: `demo`
 - Restaurants: `harborpho`, `ballardbread`, `caphilltacos`, `fremontpizza`, `bellevuecurry`, `redmondpoke`, `kirklandsushi`
 
-Demo menu photos in `public/assets/demo-food/` are generated illustrations (Noto Color Emoji, Apache 2.0). Replace them with real photos by editing each dish in the Menu tab. Uploaded photos are stored in `data/uploads/` (set `UPLOADS_DIR` to change this). Back that folder up along with the database.
+**Food photos:** restaurants upload real photos in the Menu tab (dish → Edit → Choose photo). The demo dishes start without photos. To give them photos, put JPEGs you have the rights to in `public/assets/demo-food/`, named as in the `MENU` list in `server/seed.js` (e.g. `beef-pho.jpg`), then re-run `npm run seed` on a fresh database. Uploaded photos are stored in `data/uploads/` (set `UPLOADS_DIR` to change this). Back that folder up along with the database.
 
 ## Project layout
 

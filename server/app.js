@@ -4,6 +4,7 @@ const { createSessionStore } = require('./auth');
 const { createOrderService } = require('./orders');
 const { HttpError } = require('./errors');
 const { createImageStore } = require('./images');
+const { createReceiptService } = require('./receipts');
 
 const CSP = [
   "default-src 'self'",
@@ -23,7 +24,8 @@ function createApp({ db, config, payments }) {
   const sessions = createSessionStore(db, config);
   const orders = createOrderService({ db, config, payments });
   const images = createImageStore(config.uploadsDir || path.join(__dirname, '..', 'data', 'uploads'));
-  const deps = { db, config, payments, sessions, orders, images };
+  const receipts = createReceiptService({ db, config });
+  const deps = { db, config, payments, sessions, orders, images, receipts };
 
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');

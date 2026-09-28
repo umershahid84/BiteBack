@@ -7,7 +7,7 @@ const { transaction } = require('../db');
 
 const cardLabel = (c) => `${c.brand.toUpperCase()} •••• ${c.last4}`;
 
-module.exports = function customerRoutes({ db, payments, orders }) {
+module.exports = function customerRoutes({ db, payments, orders, receipts }) {
   const router = express.Router();
   router.use(requireRole('customer'));
 
@@ -246,6 +246,18 @@ module.exports = function customerRoutes({ db, payments, orders }) {
 
   router.get('/orders/:id', (req, res) => {
     res.json({ order: presentOrder(ownOrder(req)) });
+  });
+
+  router.get('/orders/:id/receipt', (req, res) => {
+    res.json({ receipt: receipts.receiptData(ownOrder(req)) });
+  });
+
+  router.get('/orders/:id/receipt.pdf', async (req, res) => {
+    const rc = receipts.receiptData(ownOrder(req));
+    const pdf = await receipts.receiptPdf(rc);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `${req.query.inline ? 'inline' : 'attachment'}; filename="BiteBack-receipt-${rc.receiptNumber}.pdf"`);
+    res.send(pdf);
   });
 
   router.post('/orders/:id/cancel', async (req, res) => {

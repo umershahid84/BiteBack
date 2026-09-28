@@ -7,6 +7,7 @@ if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
 const int = (v, d) => (v === undefined || v === '' ? d : Number.parseInt(v, 10));
 
 module.exports = {
+  timeZone: process.env.TIME_ZONE || 'America/Los_Angeles',
   port: int(process.env.PORT, 3000),
   uploadsDir: process.env.UPLOADS_DIR || path.join(__dirname, '..', 'data', 'uploads'),
   databasePath: process.env.DATABASE_PATH || path.join(__dirname, '..', 'data', 'biteback.db'),

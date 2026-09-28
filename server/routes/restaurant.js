@@ -3,7 +3,7 @@ const v = require('../validate');
 const { HttpError, bad } = require('../errors');
 const { requireRole, createLimiter } = require('../auth');
 
-module.exports = function restaurantRoutes({ db, orders, images }) {
+module.exports = function restaurantRoutes({ db, orders, images, receipts }) {
   const router = express.Router();
   router.use(requireRole('restaurant'));
 
@@ -243,6 +243,32 @@ module.exports = function restaurantRoutes({ db, orders, images }) {
       clearInterval(ping);
       orders.events.off('reserved', onReserved);
     });
+  });
+
+  // ---- Daily report ----
+
+  function reportDate(req) {
+    const date = String(req.query.date || receipts.todayIn());
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) throw bad('Please choose a valid date.');
+    return date;
+  }
+
+  router.get('/report', (req, res) => {
+    res.json({ report: receipts.reportData(req.restaurant.id, reportDate(req)) });
+  });
+
+  router.get('/report.csv', (req, res) => {
+    const rep = receipts.reportData(req.restaurant.id, reportDate(req));
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="BiteBack-report-${rep.date}.csv"`);
+    res.send(receipts.reportCsv(rep));
+  });
+
+  router.get('/report.pdf', async (req, res) => {
+    const rep = receipts.reportData(req.restaurant.id, reportDate(req));
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `${req.query.inline ? 'inline' : 'attachment'}; filename="BiteBack-report-${rep.date}.pdf"`);
+    res.send(await receipts.reportPdf(rep));
   });
 
   router.get('/stats', (req, res) => {

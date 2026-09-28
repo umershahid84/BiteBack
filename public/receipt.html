@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Receipt · BiteBack</title>
+<meta name="description" content="BiteBack: rescue good restaurant food at a discount around greater Seattle.">
+<meta name="theme-color" content="#07110d">
+<link rel="icon" href="/assets/logo-mark.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<header id="site-header" class="site-header no-print"></header>
+<main class="page">
+  <div class="container" style="max-width:760px">
+    <div class="doc-toolbar no-print">
+      <a class="btn btn-ghost btn-sm" href="/orders">← My orders</a><span class="spacer"></span>
+      <button class="btn btn-ghost btn-sm" id="print-btn" type="button">🖨️ Print</button>
+      <a class="btn btn-primary btn-sm" id="pdf-btn" href="#">⬇ Download PDF</a>
+    </div>
+    <div id="msg"></div>
+    <article class="paper" id="receipt" aria-live="polite"></article>
+  </div>
+</main>
+<script type="module" src="/js/receipt.js"></script>
+</body>
+</html>
