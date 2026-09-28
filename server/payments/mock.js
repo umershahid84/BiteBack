@@ -49,6 +49,12 @@ module.exports = function createMockProvider(_config, PaymentError) {
       if (intent) intent.status = 'captured';
     },
 
+    refund(ref, amountCents) {
+      const intent = intents.get(ref);
+      if (intent) intent.refunded = (intent.refunded || 0) + amountCents;
+      return { id: `re_mock_${crypto.randomBytes(8).toString('hex')}` };
+    },
+
     void(ref) {
       const intent = intents.get(ref);
       if (intent) intent.status = 'canceled';

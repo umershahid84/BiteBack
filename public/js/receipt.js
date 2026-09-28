@@ -50,7 +50,7 @@ try {
     <div class="p-pay">
       <div><div class="p-label">Card</div><b>${esc(r.card || 'n/a')}</b></div>
       <div><div class="p-label">Payment status</div><b>${esc(r.paymentStatus)}</b></div>
-      <div><div class="p-label">Amount charged</div><b>${money(r.amountChargedCents)}</b></div>
+      <div><div class="p-label">Amount charged</div><b>${money(r.amountChargedCents)}</b>${r.refundedCents ? `<div class="disc small">Refunded ${money(r.refundedCents)} on ${esc(r.refundedAtText)}</div>` : ''}</div>
       <div><div class="p-label">Transaction ID</div><b style="word-break:break-all">${esc(r.paymentRef || 'n/a')}</b></div>
     </div>
     ${r.pin ? `<div class="p-pin"><span>Pickup PIN: show at the counter</span><b>${esc(r.pin)}</b></div>` : ''}

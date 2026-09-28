@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE COLLATE NOCASE,
   username TEXT NOT NULL UNIQUE COLLATE NOCASE,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('customer', 'restaurant')),
+  role TEXT NOT NULL CHECK (role IN ('customer', 'restaurant', 'admin')),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
   payment_customer_id TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -34,6 +35,8 @@ CREATE TABLE IF NOT EXISTS restaurants (
   lat REAL,
   lng REAL,
   tax_rate_bps INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'approved' CHECK (status IN ('pending', 'approved', 'suspended')),
+  admin_note TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
@@ -102,7 +105,35 @@ CREATE TABLE IF NOT EXISTS orders (
   pickup_end TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   picked_up_at TEXT,
-  closed_at TEXT
+  closed_at TEXT,
+  refunded_cents INTEGER NOT NULL DEFAULT 0,
+  refunded_at TEXT,
+  refund_reason TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS payouts (
+  id INTEGER PRIMARY KEY,
+  restaurant_id INTEGER NOT NULL REFERENCES restaurants(id),
+  amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+  reference TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  paid_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  created_by INTEGER REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY,
+  admin_id INTEGER REFERENCES users(id),
+  action TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id INTEGER,
+  details TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE TABLE IF NOT EXISTS terms_acceptances (
@@ -135,6 +166,44 @@ function openDatabase(file) {
 // Adds columns introduced after a database was first created.
 function migrate(db) {
   const has = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col);
+  // Older databases: allow the 'admin' role and add account status (SQLite can't alter a CHECK,
+  // so the users table is rebuilt with the same data).
+  const usersSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").get()?.sql || '';
+  if (!usersSql.includes("'admin'")) {
+    db.exec('PRAGMA foreign_keys = OFF');
+    db.exec('BEGIN');
+    try {
+      db.exec(`CREATE TABLE users_new (
+        id INTEGER PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('customer', 'restaurant', 'admin')),
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
+        payment_customer_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      )`);
+      db.exec(`INSERT INTO users_new (id, email, username, password_hash, role, payment_customer_id, created_at)
+               SELECT id, email, username, password_hash, role, payment_customer_id, created_at FROM users`);
+      db.exec('DROP TABLE users');
+      db.exec('ALTER TABLE users_new RENAME TO users');
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    } finally {
+      db.exec('PRAGMA foreign_keys = ON');
+    }
+  }
+  if (!has('restaurants', 'status')) {
+    db.exec("ALTER TABLE restaurants ADD COLUMN status TEXT NOT NULL DEFAULT 'approved' CHECK (status IN ('pending', 'approved', 'suspended'))");
+    db.exec("ALTER TABLE restaurants ADD COLUMN admin_note TEXT NOT NULL DEFAULT ''");
+  }
+  if (!has('orders', 'refunded_cents')) {
+    db.exec('ALTER TABLE orders ADD COLUMN refunded_cents INTEGER NOT NULL DEFAULT 0');
+    db.exec('ALTER TABLE orders ADD COLUMN refunded_at TEXT');
+    db.exec("ALTER TABLE orders ADD COLUMN refund_reason TEXT NOT NULL DEFAULT ''");
+  }
   if (!has('offers', 'menu_item_id')) db.exec('ALTER TABLE offers ADD COLUMN menu_item_id INTEGER REFERENCES menu_items(id)');
   if (!has('offers', 'image_path')) db.exec('ALTER TABLE offers ADD COLUMN image_path TEXT');
 }

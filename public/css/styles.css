@@ -465,3 +465,18 @@ table.data tbody tr:hover { background: color-mix(in srgb, var(--surface-2) 60%,
 .agree-check:has(input:disabled) { opacity: .6; }
 .legal-links { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; font-size: .82rem; }
 .legal-links a { color: var(--muted); }
+
+/* ---------- Admin console ---------- */
+.tab-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 4px; border-radius: 999px; background: var(--accent); color: #1c1203; font-size: .7rem; }
+.range-pick { margin-bottom: 4px; }
+.filters-row { margin: 12px 0 16px; }
+.kpis-4 { grid-template-columns: repeat(4, 1fr); }
+.kpis-2 { grid-template-columns: repeat(2, 1fr); max-width: 640px; }
+@media (max-width: 860px) { .kpis-4 { grid-template-columns: 1fr 1fr; } }
+.chart-card { position: relative; margin-top: 4px; }
+.chart-card svg { display: block; margin: 12px 0 8px; overflow: visible; }
+.chart-card .axis { fill: var(--muted); font: 11px var(--font-body); }
+.chart-card .bar.hover path { fill: #34d399; }
+#daily-chart { position: relative; }
+.chart-tip { position: absolute; top: 8px; width: 180px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: .82rem; box-shadow: var(--shadow-lg); pointer-events: none; z-index: 2; }
+.restaurant-status { margin-bottom: 18px; }

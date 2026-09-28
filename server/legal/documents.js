@@ -346,13 +346,14 @@ const REQUIRED = {
 };
 
 function createLegal(config) {
-  const company = {
+  const companyInfo = () => ({
     entity: esc(config.legalEntityName || 'BiteBack'),
     email: esc(config.supportEmail || 'support@biteback.app'),
     address: esc(config.legalAddress || 'Seattle, Washington'),
     serviceFeePct: (config.serviceFeeBps ?? 500) / 100,
     graceMinutes: config.pickupGraceMinutes ?? 10,
-  };
+  });
+  let company = companyInfo();
   const cache = new Map();
   function get(id) {
     const def = DOCUMENTS[id];
@@ -363,7 +364,11 @@ function createLegal(config) {
   return {
     get,
     required: (role) => (REQUIRED[role] || []).map((id) => ({ id, title: DOCUMENTS[id].title, version: VERSION })),
-    company,
+    // Re-render after settings such as the service fee change.
+    refresh() {
+      company = companyInfo();
+      cache.clear();
+    },
   };
 }
 

@@ -513,3 +513,88 @@ test('sign-up requires accepting the terms; declining creates no account; update
   const page = await fetch(env.base.replace('/api', '') + '/legal/restaurant-agreement');
   assert.match(await page.text(), /Restaurant Partner Agreement[\s\S]*Verify the PIN before handing over food/);
 });
+
+test('admin console: approvals, suspensions, refunds, payouts, tax, settings and audit log', async (t) => {
+  const env = await setup();
+  t.after(() => env.server.close());
+  const { hashPassword } = require('../server/auth');
+  env.db.prepare("INSERT INTO users (email, username, password_hash, role) VALUES ('owner@example.com', 'owner', ?, 'admin')").run(hashPassword('ownerpass1'));
+  const admin = env.client();
+  let r = await admin('/auth/login', { method: 'POST', body: { login: 'owner', password: 'ownerpass1' } });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.user.role, 'admin');
+
+  // Non-admins are locked out; admins cannot be created by sign-up.
+  const cust = env.client();
+  await cust('/auth/signup', { method: 'POST', body: { email: 'c@example.com', username: 'cust', password: 'password1', role: 'admin' } });
+  r = await cust('/auth/me');
+  assert.equal(r.body.user.role, 'customer');
+  r = await cust('/admin/overview');
+  assert.equal(r.status, 403);
+
+  // Approval required: new restaurant's offers stay hidden until approved.
+  r = await admin('/admin/settings', { method: 'PUT', body: { requireRestaurantApproval: true, serviceFeePct: 6 } });
+  assert.deepEqual(r.body.changed.sort(), ['requireRestaurantApproval', 'serviceFeeBps']);
+  const shop = env.client();
+  r = await shop('/auth/signup', { method: 'POST', body: { role: 'restaurant', email: 's@example.com', username: 'shop', password: 'secret123',
+    restaurant: { name: 'Shop', address: '1 Main St', city: 'Tacoma', zip: '98402' } } });
+  assert.equal(r.body.user.restaurant.status, 'pending');
+  const item = await menuItem(shop, 'Tacos', 20);
+  r = await shop('/restaurant/offers', { method: 'POST', body: { menuItemId: item, reason: 'other', discountPct: 50, quantity: 5, expiresInMinutes: 120 } });
+  const offerId = r.body.offer.id;
+  r = await cust('/offers');
+  assert.equal(r.body.offers.length, 0, 'hidden while pending');
+  const rid = (await admin('/admin/restaurants?status=pending')).body.restaurants[0].id;
+  await admin(`/admin/restaurants/${rid}/status`, { method: 'POST', body: { status: 'approved' } });
+  r = await cust('/offers');
+  assert.equal(r.body.offers.length, 1, 'visible after approval');
+
+  // New service fee (6%) applies to quotes.
+  r = await cust('/quote', { method: 'POST', body: { offerId, quantity: 2 } });
+  assert.equal(r.body.quote.serviceFeeCents, 120);
+
+  // Order, pickup, refund.
+  r = await cust('/orders', { method: 'POST', body: { offerId, quantity: 2, newCard: { token: card() } } });
+  const order = r.body.order;
+  await shop('/restaurant/pickup/confirm', { method: 'POST', body: { pin: order.pin } });
+  r = await admin(`/admin/orders/${order.id}/refund`, { method: 'POST', body: { amount: '5.00', reason: 'Missing item' } });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.order.refundedCents, 500);
+  r = await admin(`/admin/orders/${order.id}/refund`, { method: 'POST', body: { amount: '999', reason: 'too much' } });
+  assert.equal(r.status, 400, 'cannot refund more than was charged');
+  r = await cust(`/orders/${order.id}/receipt`);
+  assert.equal(r.body.receipt.refundedCents, 500);
+
+  // Overview and payouts reflect the refund.
+  r = await admin('/admin/overview');
+  assert.equal(r.body.totals.ordersPickedUp, 1);
+  assert.equal(r.body.totals.refundsCents, 500);
+  assert.equal(r.body.totals.gmvCents, order.totalCents - 500);
+  r = await admin('/admin/payouts');
+  const bal = r.body.balances.find((b) => b.restaurantId === rid);
+  const foodRefund = Math.round((500 * order.subtotalCents) / order.totalCents);
+  assert.equal(bal.earnedCents, order.subtotalCents - foodRefund);
+  r = await admin('/admin/payouts', { method: 'POST', body: { restaurantId: rid, amount: (bal.earnedCents / 100).toFixed(2), reference: 'ACH-1' } });
+  assert.equal(r.status, 201);
+  r = await admin('/admin/payouts');
+  assert.equal(r.body.balances.find((b) => b.restaurantId === rid).balanceCents, 0);
+
+  r = await admin('/admin/tax');
+  assert.equal(r.body.rows[0].city, 'Tacoma');
+  assert.ok(r.body.totals.taxCents > 0);
+
+  // Suspensions.
+  const custId = env.db.prepare("SELECT id FROM users WHERE username = 'cust'").get().id;
+  await admin(`/admin/users/${custId}/status`, { method: 'POST', body: { status: 'suspended' } });
+  r = await cust('/offers');
+  assert.equal(r.status, 401, 'suspended user signed out');
+  r = await cust('/auth/login', { method: 'POST', body: { login: 'cust', password: 'password1' } });
+  assert.equal(r.status, 403);
+  await admin(`/admin/restaurants/${rid}/status`, { method: 'POST', body: { status: 'suspended', note: 'Health permit expired' } });
+  r = await shop('/restaurant/offers', { method: 'POST', body: { menuItemId: item, reason: 'other', discountPct: 50, quantity: 5, expiresInMinutes: 60 } });
+  assert.equal(r.status, 403, 'suspended restaurant cannot post');
+
+  r = await admin('/admin/audit');
+  const actions = r.body.entries.map((e) => e.action);
+  for (const a of ['settings.update', 'restaurant.approved', 'order.refund', 'payout.record', 'user.suspended', 'restaurant.suspended']) assert.ok(actions.includes(a), a);
+});

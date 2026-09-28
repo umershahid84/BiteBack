@@ -9,6 +9,7 @@ const { openDatabase, transaction } = require('./db');
 const { hashPassword } = require('./auth');
 const { lookupZip } = require('./areas');
 const { createLegal } = require('./legal/documents');
+const { quote } = require('./pricing');
 
 const DEMO_PASSWORD = 'BiteBack123';
 
@@ -132,6 +133,7 @@ function main() {
 
   transaction(db, () => {
     userId('demo@biteback.test', 'demo', 'customer');
+    userId('admin@biteback.test', 'admin', 'admin'); // demo owner account for the admin console
     const ids = {};
     for (const r of RESTAURANTS) {
       const uid = userId(`${r.user}@biteback.test`, r.user, 'restaurant');
@@ -177,6 +179,8 @@ function main() {
       }
       ids[user] = rid;
     });
+    // One restaurant waiting for approval, to show the admin approval queue.
+    db.prepare("UPDATE restaurants SET status = 'pending' WHERE id = ? AND status = 'approved'").run(ids.issaquahbakehouse);
     REGIONAL_MENU.forEach(([user, dish, desc, dietary, price, reason, pct, qty], i) => {
       let item = db.prepare('SELECT * FROM menu_items WHERE restaurant_id = ? AND name = ? AND active = 1').get(ids[user], dish);
       if (!item) {
@@ -192,6 +196,32 @@ function main() {
           pct, qty, qty, start.toISOString(), end.toISOString());
     });
 
+    // Two weeks of completed demo orders so the admin dashboard and reports have data.
+    const demoId = db.prepare("SELECT id FROM users WHERE username = 'demo'").get().id;
+    if (!db.prepare('SELECT 1 FROM orders WHERE user_id = ? AND status = ? LIMIT 1').get(demoId, 'picked_up')) {
+      const items = db.prepare(`SELECT m.*, r.tax_rate_bps, (SELECT id FROM offers o WHERE o.menu_item_id = m.id LIMIT 1) AS offer_id
+        FROM menu_items m JOIN restaurants r ON r.id = m.restaurant_id WHERE r.status = 'approved'`).all().filter((m) => m.offer_id);
+      let seedN = 7;
+      const rand = () => { seedN = (seedN * 16807) % 2147483647; return seedN / 2147483647; };
+      for (let d = 14; d >= 1; d--) {
+        const count = 2 + Math.floor(rand() * 5);
+        for (let k = 0; k < count; k++) {
+          const m = items[Math.floor(rand() * items.length)];
+          const qty = 1 + Math.floor(rand() * 2);
+          const pct = [40, 45, 50, 55, 60][Math.floor(rand() * 5)];
+          const q = quote({ originalUnitCents: m.price_cents, discountPct: pct, quantity: qty, serviceFeeBps: config.serviceFeeBps, taxRateBps: m.tax_rate_bps });
+          const created = new Date(now - d * 86400000 - Math.floor(rand() * 8 + 1) * 3600000);
+          const picked = new Date(created.getTime() + (15 + Math.floor(rand() * 60)) * 60000);
+          db.prepare(`INSERT INTO orders (user_id, offer_id, restaurant_id, item_title, quantity, unit_price_cents, original_unit_price_cents, discount_pct,
+              subtotal_cents, service_fee_cents, tax_rate_bps, tax_cents, total_cents, pin, status, payment_ref, card_label, pickup_end, created_at, picked_up_at, closed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'picked_up', ?, 'VISA •••• 4242', ?, ?, ?, ?)`)
+            .run(demoId, m.offer_id, m.restaurant_id, m.name, qty, q.unitPriceCents, q.originalUnitCents, pct, q.subtotalCents, q.serviceFeeCents,
+              q.taxRateBps, q.taxCents, q.totalCents, String(1000 + Math.floor(rand() * 9000)), `pi_mock_demo_${d}_${k}`,
+              picked.toISOString(), created.toISOString(), picked.toISOString(), picked.toISOString());
+        }
+      }
+    }
+
     // Demo accounts have accepted the current terms (recorded like a real sign-up).
     const legal = createLegal(config);
     for (const u of db.prepare('SELECT id, role FROM users').all()) {
@@ -205,6 +235,7 @@ function main() {
 
   console.log('Seeded demo data.');
   console.log(`  Customer login:   demo / ${DEMO_PASSWORD}`);
+  console.log(`  Owner/admin login: admin / ${DEMO_PASSWORD}  (demo only: create your real one with npm run create-admin)`);
   console.log(`  Restaurant logins (password ${DEMO_PASSWORD}):`);
   console.log(`    Seattle/Eastside: ${RESTAURANTS.map((r) => r.user).join(', ')}`);
   console.log(`    Around the region: ${REGIONAL.map((r) => `${r[0]} (${r[4]})`).join(', ')}`);

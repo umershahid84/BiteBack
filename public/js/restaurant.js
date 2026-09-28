@@ -7,7 +7,18 @@ renderHeader('dash');
 const config = await getConfig();
 let restaurant = (await api('/restaurant/profile')).restaurant;
 
+function statusBanner() {
+  const el = $('#r-status-banner');
+  const text = {
+    pending: '⏳ <b>Your restaurant is waiting for approval.</b> You can set up your menu and offers now; customers will see them once BiteBack approves your account (usually within 1 business day).',
+    suspended: `⛔ <b>Your restaurant is suspended.</b> Your offers are hidden and you can't post new ones. You can still verify pickups for existing orders. Contact ${esc(config.supportEmail || 'BiteBack support')}.`,
+  }[restaurant.status];
+  el.className = text ? `alert ${restaurant.status === 'suspended' ? 'alert-error' : 'alert-warn'} restaurant-status` : 'hidden';
+  el.innerHTML = text || '';
+}
+
 function setTitle() {
+  statusBanner();
   $('#r-title').textContent = restaurant.name;
   $('#r-sub').textContent = `${restaurant.address}, ${restaurant.city} ${restaurant.zip} · Sales tax ${pct(restaurant.tax_rate_bps)}`;
 }
