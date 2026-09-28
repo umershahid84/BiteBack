@@ -33,7 +33,7 @@ function createSessionStore(db, config) {
   const lookup = db.prepare(`
     SELECT u.id, u.email, u.username, u.role, u.payment_customer_id
     FROM sessions s JOIN users u ON u.id = s.user_id
-    WHERE s.token_hash = ? AND s.expires_at > ?`);
+    WHERE s.token_hash = ? AND s.expires_at > ? AND u.status = 'active'`);
   const remove = db.prepare('DELETE FROM sessions WHERE token_hash = ?');
 
   function cookieHeader(value, maxAgeSeconds) {

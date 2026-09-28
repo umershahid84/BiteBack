@@ -64,7 +64,7 @@ export async function requireRole(role) {
   return user;
 }
 
-export const homeFor = (user) => (user?.role === 'restaurant' ? '/restaurant/' : '/offers');
+export const homeFor = (user) => (user?.role === 'admin' ? '/admin/' : user?.role === 'restaurant' ? '/restaurant/' : '/offers');
 
 export async function renderHeader(active) {
   const el = document.getElementById('site-header');
@@ -75,6 +75,9 @@ export async function renderHeader(active) {
   if (!user) {
     links = link('/#how', 'How it works', 'how') + link('/#restaurants', 'For restaurants', 'rest') + link('/login', 'Log in', 'login') +
       '<a href="/signup" class="btn btn-primary btn-sm">Sign up free</a>';
+  } else if (user.role === 'admin') {
+    links = link('/admin/', 'Admin console', 'admin') + link('/', 'Public site', 'home') + `<span class="who">Owner · ${esc(user.username)}</span>` +
+      '<button class="linklike" id="logout-btn">Log out</button>';
   } else if (user.role === 'restaurant') {
     links = link('/restaurant/', 'Dashboard', 'dash') + `<span class="who">${esc(user.restaurant?.name || user.username)}</span>` +
       '<button class="linklike" id="logout-btn">Log out</button>';

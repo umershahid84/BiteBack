@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin console · BiteBack</title>
+<meta name="description" content="BiteBack: rescue good restaurant food at a discount around greater Seattle.">
+<meta name="theme-color" content="#07110d">
+<link rel="icon" href="/assets/logo-mark.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<header id="site-header" class="site-header"></header>
+<main class="page">
+  <div class="container" style="max-width:1280px">
+    <div class="page-head">
+      <div><h1>Admin console</h1><p class="muted" style="margin:4px 0 0">Run BiteBack: restaurants, customers, orders, money and settings.</p></div>
+      <span class="spacer"></span>
+      <span class="status active" id="pay-mode"></span>
+    </div>
+    <div class="tabs" role="tablist" id="admin-tabs">
+      <button data-tab="overview" class="on">Overview</button>
+      <button data-tab="restaurants">Restaurants <span class="tab-badge hidden" id="pending-badge"></span></button>
+      <button data-tab="customers">Customers</button>
+      <button data-tab="orders">Orders</button>
+      <button data-tab="offers">Live offers</button>
+      <button data-tab="payouts">Payouts</button>
+      <button data-tab="tax">Sales tax</button>
+      <button data-tab="settings">Settings</button>
+      <button data-tab="audit">Audit log</button>
+    </div>
+    <div id="admin-msg"></div>
+    <section data-panel="overview"></section>
+    <section data-panel="restaurants" class="hidden"></section>
+    <section data-panel="customers" class="hidden"></section>
+    <section data-panel="orders" class="hidden"></section>
+    <section data-panel="offers" class="hidden"></section>
+    <section data-panel="payouts" class="hidden"></section>
+    <section data-panel="tax" class="hidden"></section>
+    <section data-panel="settings" class="hidden"></section>
+    <section data-panel="audit" class="hidden"></section>
+  </div>
+</main>
+<script type="module" src="/js/admin.js"></script>
+</body>
+</html>

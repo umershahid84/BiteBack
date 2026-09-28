@@ -78,7 +78,9 @@ function createReceiptService({ db, config }) {
       orderId: order.id,
       status: order.status,
       statusLabel: ORDER_STATUS[order.status] || order.status,
-      paymentStatus: PAYMENT_STATUS[order.status] || order.status,
+      paymentStatus: order.refunded_cents
+        ? (order.refunded_cents >= order.total_cents ? 'Refunded in full' : `Paid, partially refunded (${money(order.refunded_cents)})`)
+        : PAYMENT_STATUS[order.status] || order.status,
       orderedAt: order.created_at,
       pickedUpAt: order.picked_up_at,
       closedAt: order.closed_at,
@@ -107,6 +109,8 @@ function createReceiptService({ db, config }) {
       taxCents: order.tax_cents,
       totalCents: order.total_cents,
       amountChargedCents: order.status === 'picked_up' ? order.total_cents : 0,
+      refundedCents: order.refunded_cents || 0,
+      refundedAtText: formatDateTime(order.refunded_at, timeZone),
       card: order.card_label,
       paymentRef: order.payment_ref || '',
       pin: order.status === 'reserved' ? order.pin : null,
@@ -206,7 +210,7 @@ function createReceiptService({ db, config }) {
     const pay = [
       ['Card', rc.card || 'n/a'],
       ['Payment status', rc.paymentStatus],
-      ['Amount charged', money(rc.amountChargedCents)],
+      ['Amount charged', rc.refundedCents ? `${money(rc.amountChargedCents)} (refunded ${money(rc.refundedCents)})` : money(rc.amountChargedCents)],
       ['Transaction ID', rc.paymentRef || 'n/a'],
     ];
     pay.forEach(([k, v], i) => {

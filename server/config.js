@@ -17,6 +17,8 @@ module.exports = {
   legalEntityName: process.env.LEGAL_ENTITY_NAME || 'BiteBack',
   supportEmail: process.env.SUPPORT_EMAIL || 'support@biteback.app',
   legalAddress: process.env.LEGAL_ADDRESS || 'Seattle, Washington',
+  // New restaurants must be approved by an admin before their offers are visible.
+  requireRestaurantApproval: process.env.REQUIRE_RESTAURANT_APPROVAL !== 'false',
   timeZone: process.env.TIME_ZONE || 'America/Los_Angeles',
   port: int(process.env.PORT, 3000),
   uploadsDir: process.env.UPLOADS_DIR || path.join(__dirname, '..', 'data', 'uploads'),

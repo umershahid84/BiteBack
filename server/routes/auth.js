@@ -49,6 +49,7 @@ module.exports = function authRoutes({ db, config, sessions, payments, terms }) 
     // dryRun: validate the form before showing the agreement, without creating anything.
     if (body.dryRun) return res.json({ ok: true });
 
+    // Admin accounts are created with `npm run create-admin`, never through public sign-up.
     // No account is created unless the current terms for this role were accepted.
     terms.assertAccepted(role, body.acceptedTerms);
 
@@ -57,10 +58,11 @@ module.exports = function authRoutes({ db, config, sessions, payments, terms }) 
         .prepare('INSERT INTO users (email, username, password_hash, role) VALUES (?, ?, ?, ?)')
         .run(email, username, hashPassword(password), role);
       if (restaurant) {
-        db.prepare(`INSERT INTO restaurants (owner_user_id, name, address, city, zip, phone, cuisine, lat, lng, tax_rate_bps)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        db.prepare(`INSERT INTO restaurants (owner_user_id, name, address, city, zip, phone, cuisine, lat, lng, tax_rate_bps, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
           .run(lastInsertRowid, restaurant.name, restaurant.address, restaurant.city, restaurant.zip, restaurant.phone,
-            restaurant.cuisine, restaurant.lat, restaurant.lng, config.defaultTaxRateBps);
+            restaurant.cuisine, restaurant.lat, restaurant.lng, config.defaultTaxRateBps,
+            config.requireRestaurantApproval ? 'pending' : 'approved');
       }
       terms.record(Number(lastInsertRowid), role, req);
       return Number(lastInsertRowid);
@@ -81,6 +83,7 @@ module.exports = function authRoutes({ db, config, sessions, payments, terms }) 
       loginLimiter.fail(key);
       throw new HttpError(401, 'Email/user name or password is incorrect.');
     }
+    if (user.status !== 'active') throw new HttpError(403, `This account has been suspended. Contact ${config.supportEmail} for help.`);
     loginLimiter.reset(key);
     sessions.start(res, user.id);
     res.json({ user: publicUser(user) });
@@ -112,6 +115,7 @@ module.exports = function authRoutes({ db, config, sessions, payments, terms }) 
       stripePublishableKey: payments.mode === 'stripe' ? config.stripePublishableKey : null,
       serviceFeeBps: config.serviceFeeBps,
       reasons: v.OFFER_REASONS,
+      supportEmail: config.supportEmail,
       map: { tileUrl: config.mapTileUrl, attribution: config.mapAttribution, darkFilter: config.mapDarkFilter },
       dietaryTags: v.DIETARY_TAGS,
     });

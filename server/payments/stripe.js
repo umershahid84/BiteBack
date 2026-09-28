@@ -81,6 +81,11 @@ module.exports = function createStripeProvider(config, PaymentError) {
       await wrap(() => stripe.paymentIntents.capture(ref));
     },
 
+    async refund(ref, amountCents) {
+      const refund = await wrap(() => stripe.refunds.create({ payment_intent: ref, amount: amountCents }));
+      return { id: refund.id };
+    },
+
     async void(ref) {
       await stripe.paymentIntents.cancel(ref).catch(() => {});
     },

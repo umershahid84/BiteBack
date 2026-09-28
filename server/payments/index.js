@@ -11,6 +11,7 @@
 //        -> { ref, status: 'authorized' | 'requires_action', clientSecret? }   throws PaymentError
 //   authorizationStatus(ref)                 -> 'authorized' | 'requires_action' | 'failed'
 //   capture(ref)
+//   refund(ref, amountCents)                 -> { id }   (captured payments only)
 //   void(ref)
 
 class PaymentError extends Error {

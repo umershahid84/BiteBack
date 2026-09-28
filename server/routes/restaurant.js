@@ -154,7 +154,14 @@ module.exports = function restaurantRoutes({ db, orders, images, receipts, terms
     res.json({ offers });
   });
 
+  const notSuspended = (req) => {
+    if (req.restaurant.status === 'suspended') {
+      throw new HttpError(403, 'Your restaurant is suspended, so you cannot post offers. Please contact BiteBack support.');
+    }
+  };
+
   router.post('/offers', (req, res) => {
+    notSuspended(req);
     const o = parseOffer(req);
     const { lastInsertRowid } = db.prepare(`
       INSERT INTO offers (restaurant_id, menu_item_id, image_path, title, description, reason, dietary, original_price_cents, discount_pct,
@@ -199,6 +206,7 @@ module.exports = function restaurantRoutes({ db, orders, images, receipts, terms
     if (!['active', 'paused', 'ended'].includes(status)) throw bad('Invalid status.');
     if (existing.status === 'ended') throw new HttpError(409, 'This offer has already ended.');
     if (status === 'active' && existing.pickup_end <= new Date().toISOString()) throw bad('The pickup window has passed. Create a new offer.');
+    if (status === 'active') notSuspended(req);
     db.prepare('UPDATE offers SET status = ? WHERE id = ?').run(status, existing.id);
     res.json({ offer: db.prepare('SELECT * FROM offers WHERE id = ?').get(existing.id) });
   });

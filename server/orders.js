@@ -16,7 +16,7 @@ function createOrderService({ db, config, payments }) {
   events.setMaxListeners(0);
 
   const getOffer = db.prepare(`
-    SELECT o.*, r.name AS restaurant_name, r.tax_rate_bps
+    SELECT o.*, r.name AS restaurant_name, r.tax_rate_bps, r.status AS restaurant_status
     FROM offers o JOIN restaurants r ON r.id = o.restaurant_id WHERE o.id = ?`);
   const activePins = db.prepare(`SELECT pin FROM orders WHERE restaurant_id = ? AND status IN ('pending_payment', 'reserved')`);
   const getOrder = db.prepare('SELECT * FROM orders WHERE id = ?');
@@ -36,7 +36,9 @@ function createOrderService({ db, config, payments }) {
   }
 
   function assertOrderable(offer, quantity) {
-    if (!offer || offer.status !== 'active' || offer.pickup_end <= nowIso()) throw new HttpError(404, 'This offer is no longer available.');
+    if (!offer || offer.status !== 'active' || offer.pickup_end <= nowIso() || offer.restaurant_status !== 'approved') {
+      throw new HttpError(404, 'This offer is no longer available.');
+    }
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_PER_ORDER) throw bad('Please choose a valid quantity.');
     if (quantity > offer.quantity_available) {
       throw new HttpError(409, offer.quantity_available

@@ -37,6 +37,31 @@ Customers can view it (My orders → View receipt), **print** it, or **download 
 
 **Automatic cleanup:** unfinished checkouts are released after 15 minutes. Orders not picked up within 10 minutes after the discard timer ends are released **without charging the customer**. Expired offers are closed.
 
+## Owner / admin console (`/admin/`)
+
+Admin accounts can't be created through sign-up. Create yours on the server:
+
+```bash
+npm run create-admin -- --email you@yourcompany.com --username owner
+# asks for a password (or set ADMIN_PASSWORD); run again to reset the password
+```
+
+Log in at `/login` and you land on the console:
+
+| Tab | What you can do |
+|---|---|
+| **Overview** | For any date range: BiteBack revenue (service fees), total charged, restaurant food sales, sales tax, orders, meals rescued, customer savings and refunds. Also a daily chart (with a table view), what's happening right now, and the top restaurants. |
+| **Restaurants** | Search and filter. **Approve** new restaurants (their offers stay hidden until approved), and **suspend** or reinstate restaurants with a note. |
+| **Customers** | Customers, restaurant owners and admins, with orders, spend, no-shows and when they accepted the terms. **Suspend** (signs them out and blocks login) or reactivate. |
+| **Orders** | Every order, with search, status and date filters. **Cancel** an open order (releases the card hold), give a **full or partial refund** with a reason, download the receipt PDF, and export CSV. |
+| **Live offers** | Everything currently listed. **Remove** anything inappropriate. |
+| **Payouts** | What each restaurant has earned (food subtotal minus the food share of refunds), what's been paid, and the balance owed. Record payouts with a reference, see the history, and export CSV. |
+| **Sales tax** | Taxable sales and tax collected by city, ZIP and rate for your Washington excise tax return, with CSV export. |
+| **Settings** | Customer service fee %, default sales tax for new restaurants, and whether new restaurants need approval. |
+| **Audit log** | Every admin action: approvals, suspensions, refunds, payouts and settings changes, with who did it and when. |
+
+Suspended restaurants see a banner in their portal and can't post offers, but they can still verify pickups for existing orders. Pending restaurants can set up their menu while they wait for approval (`REQUIRE_RESTAURANT_APPROVAL`, on by default).
+
 ## Terms, agreement and privacy
 
 Sign-up has two steps. First the form is checked, then the **Customer Terms of Service + Privacy Policy** (customers) or the **Restaurant Partner Agreement + Privacy Policy** (restaurants) open in a dialog.
@@ -83,7 +108,8 @@ npm start                # http://localhost:3000
 npm test                 # API + pricing tests
 ```
 
-Demo logins after seeding (password `BiteBack123`):
+Demo logins after seeding (password `BiteBack123`). The seed also adds two weeks of sample completed orders so the admin dashboard has data:
+- Owner/admin: `admin` (demo only; create your real admin with `npm run create-admin`)
 - Customer: `demo`
 - Restaurants (all fictional) in Seattle and the Eastside: `harborpho`, `ballardbread`, `caphilltacos`, `fremontpizza`, `bellevuecurry`, `redmondpoke`, `kirklandsushi`
 - Restaurants around the region: `desmoinesfish` (Des Moines), `kentteriyaki` and `kentpupusas` (Kent), `fedwaykbbq` and `fedwaybakery` (Federal Way), `tacomathai`, `tacomaburger` and `tacomatamales` (Tacoma), `fifepho` (Fife), `olympiacafe` and `olympiapizza` (Olympia), `laceycurry` (Lacey), `puyallupdeli` (Puyallup), `auburnnoodle` (Auburn), `rentontacos` (Renton), `burienmed` (Burien), `tukwilasushi` (Tukwila), `lakewoodsoul` (Lakewood), `everettbbq` (Everett), `lynnwoodgreens` (Lynnwood), `bremertonchowder` (Bremerton), `issaquahbakehouse` (Issaquah)

@@ -63,7 +63,7 @@ module.exports = function customerRoutes({ db, payments, orders, receipts, terms
 
     let list = db.prepare(`
       SELECT ${offerColumns} FROM offers o JOIN restaurants r ON r.id = o.restaurant_id
-      WHERE o.status = 'active' AND o.quantity_available > 0 AND o.pickup_end > ?`)
+      WHERE o.status = 'active' AND o.quantity_available > 0 AND o.pickup_end > ? AND r.status = 'approved'`)
       .all(new Date().toISOString())
       .map((row) => presentOffer(row, origin));
 
@@ -86,9 +86,9 @@ module.exports = function customerRoutes({ db, payments, orders, receipts, terms
   });
 
   router.get('/offers/:id', (req, res) => {
-    const row = db.prepare(`SELECT ${offerColumns}, o.status FROM offers o JOIN restaurants r ON r.id = o.restaurant_id WHERE o.id = ?`)
+    const row = db.prepare(`SELECT ${offerColumns}, o.status, r.status AS restaurant_status FROM offers o JOIN restaurants r ON r.id = o.restaurant_id WHERE o.id = ?`)
       .get(Number(req.params.id));
-    if (!row) throw new HttpError(404, 'Offer not found.');
+    if (!row || row.restaurant_status !== 'approved') throw new HttpError(404, 'Offer not found.');
     res.json({ offer: presentOffer(row), available: row.status === 'active' && row.pickup_end > new Date().toISOString() });
   });
 
@@ -174,6 +174,7 @@ module.exports = function customerRoutes({ db, payments, orders, receipts, terms
       status: o.status,
       itemTitle: o.item_title,
       imageUrl: db.prepare('SELECT image_path FROM offers WHERE id = ?').get(o.offer_id)?.image_path || null,
+      refundedCents: o.refunded_cents || 0,
       quantity: o.quantity,
       unitPriceCents: o.unit_price_cents,
       originalUnitPriceCents: o.original_unit_price_cents,

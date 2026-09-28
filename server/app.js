@@ -8,6 +8,7 @@ const { createReceiptService } = require('./receipts');
 const { lookupZip } = require('./areas');
 const { createLegal } = require('./legal/documents');
 const { createTermsService } = require('./terms');
+const { createSettings } = require('./settings');
 
 const CSP = [
   "default-src 'self'",
@@ -45,8 +46,10 @@ function createApp({ db, config, payments }) {
   const images = createImageStore(config.uploadsDir || path.join(__dirname, '..', 'data', 'uploads'));
   const receipts = createReceiptService({ db, config });
   const legal = createLegal(config);
+  const settings = createSettings(db, config, { onChange: () => legal.refresh() });
+  legal.refresh();
   const terms = createTermsService({ db, legal });
-  const deps = { db, config, payments, sessions, orders, images, receipts, legal, terms };
+  const deps = { db, config, payments, sessions, orders, images, receipts, legal, terms, settings };
 
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');
@@ -80,6 +83,7 @@ function createApp({ db, config, payments }) {
   app.use('/api/legal', require('./routes/legal').api(deps));
   app.use('/legal', require('./routes/legal').pages(deps));
   app.use('/api/restaurant', require('./routes/restaurant')(deps));
+  app.use('/api/admin', require('./routes/admin')(deps));
   app.use('/api', require('./routes/customer')(deps));
 
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Not found.')));
