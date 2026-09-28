@@ -4,17 +4,22 @@ const v = require('../validate');
 const { HttpError, bad } = require('../errors');
 const { requireRole } = require('../auth');
 const { dayRange } = require('../receipts');
+const { transaction } = require('../db');
 
 const csvEscape = (x) => (/[",\n]/.test(String(x)) ? `"${String(x).replace(/"/g, '""')}"` : String(x));
 const toCsv = (rows) => `${rows.map((r) => r.map(csvEscape).join(',')).join('\n')}\n`;
 const dollars = (c) => (c / 100).toFixed(2);
 
-// Portion of a refund that comes out of the restaurant's food sales (the rest is fee and tax).
+// refunded_cents = refunds to the customer's ORIGINAL payment (card and/or credit they used): the refunded
+// share comes out of the restaurant's food sales and BiteBack's fee. Refunds issued as PLATFORM CREDIT
+// (credited_cents) are funded by BiteBack; the restaurant keeps its full food sales.
+// Portion of an original-payment refund that comes out of the restaurant's food sales (the rest is fee and tax).
 const foodRefund = (o) => (o.refunded_cents && o.total_cents ? Math.round((o.refunded_cents * o.subtotal_cents) / o.total_cents) : 0);
 const feeRefund = (o) => (o.refunded_cents && o.total_cents ? Math.round((o.refunded_cents * o.service_fee_cents) / o.total_cents) : 0);
 const taxRefund = (o) => (o.refunded_cents && o.total_cents ? o.refunded_cents - foodRefund(o) - feeRefund(o) : 0);
 
-module.exports = function adminRoutes({ db, config, payments, orders, receipts, settings }) {
+module.exports = function adminRoutes({ db, config, payments, orders, receipts, settings, cipher }) {
+  const { credits } = orders;
   const router = express.Router();
   router.use(requireRole('admin'));
   const timeZone = config.timeZone || 'America/Los_Angeles';
@@ -72,6 +77,9 @@ module.exports = function adminRoutes({ db, config, payments, orders, receipts, 
         foodSalesCents: sum((o) => o.subtotal_cents - foodRefund(o)),
         salesTaxCents: sum((o) => o.tax_cents - taxRefund(o)),
         refundsCents: sum((o) => o.refunded_cents),
+        creditRefundsCents: sum((o) => o.credited_cents),
+        cardChargedCents: sum((o) => o.total_cents - o.credit_applied_cents - o.card_refunded_cents),
+        creditRedeemedCents: sum((o) => o.credit_applied_cents),
         discountsCents: sum((o) => (o.original_unit_price_cents - o.unit_price_cents) * o.quantity),
         ordersPickedUp: sold.length,
         mealsRescued: sum((o) => o.quantity),
@@ -83,6 +91,7 @@ module.exports = function adminRoutes({ db, config, payments, orders, receipts, 
         activeOffers: count("SELECT COUNT(*) AS n FROM offers WHERE status = 'active' AND pickup_end > ?", new Date().toISOString()),
         awaitingPickup: count("SELECT COUNT(*) AS n FROM orders WHERE status = 'reserved'"),
         payoutsOwedCents: payoutRows().reduce((n, p) => n + Math.max(0, p.balanceCents), 0),
+        creditOutstandingCents: db.prepare('SELECT COALESCE(SUM(amount_cents), 0) AS n FROM credit_ledger').get().n,
       },
       daily: Object.values(daily),
       topRestaurants: top,
@@ -126,6 +135,7 @@ module.exports = function adminRoutes({ db, config, payments, orders, receipts, 
              (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id AND o.status = 'picked_up') AS orders,
              (SELECT COALESCE(SUM(total_cents - refunded_cents), 0) FROM orders o WHERE o.user_id = u.id AND o.status = 'picked_up') AS spent_cents,
              (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id AND o.status = 'expired') AS no_shows,
+             (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger c WHERE c.user_id = u.id) AS credit_cents,
              (SELECT MAX(accepted_at) FROM terms_acceptances t WHERE t.user_id = u.id) AS terms_accepted_at
       FROM users u WHERE u.role = ? AND (u.email LIKE ? OR u.username LIKE ?)
       ORDER BY u.created_at DESC LIMIT 500`).all(role, q, q);
@@ -143,6 +153,17 @@ module.exports = function adminRoutes({ db, config, payments, orders, receipts, 
     res.json({ ok: true });
   });
 
+  // Goodwill platform credit (funded by BiteBack).
+  router.post('/users/:id/credit', (req, res) => {
+    const u = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'customer'").get(Number(req.params.id));
+    if (!u) throw new HttpError(404, 'Customer not found.');
+    const amount = v.dollarsToCents(req.body?.amount, 'Credit amount', { min: 0.01, max: 1000 });
+    const reason = v.str(req.body?.reason, 'Reason', { min: 3, max: 300 });
+    credits.add(u.id, amount, 'goodwill', { note: reason, by: req.user.id });
+    audit(req, 'credit.issue', 'user', u.id, `${u.username}: $${dollars(amount)} - ${reason}`);
+    res.json({ balanceCents: credits.balance(u.id) });
+  });
+
   // ---------- Orders ----------
   function presentOrder(o) {
     return {
@@ -150,6 +171,9 @@ module.exports = function adminRoutes({ db, config, payments, orders, receipts, 
       restaurant: o.restaurant_name, restaurantId: o.restaurant_id, unitPriceCents: o.unit_price_cents,
       originalUnitPriceCents: o.original_unit_price_cents, discountPct: o.discount_pct, subtotalCents: o.subtotal_cents,
       serviceFeeCents: o.service_fee_cents, taxCents: o.tax_cents, totalCents: o.total_cents, refundedCents: o.refunded_cents,
+      creditedCents: o.credited_cents, creditAppliedCents: o.credit_applied_cents, cardRefundedCents: o.card_refunded_cents,
+      refundableCents: o.total_cents - o.refunded_cents - o.credited_cents,
+      cardRefundableCents: o.payment_ref ? o.total_cents - o.credit_applied_cents - o.card_refunded_cents : 0,
       refundReason: o.refund_reason, card: o.card_label, paymentRef: o.payment_ref, createdAt: o.created_at, pickedUpAt: o.picked_up_at,
       pickupEnd: o.pickup_end,
     };
@@ -183,18 +207,54 @@ module.exports = function adminRoutes({ db, config, payments, orders, receipts, 
     res.json({ order: presentOrder(getOrder(req)) });
   });
 
+  // Refund a completed order, by amount or percentage, either to the ORIGINAL payment method (card first,
+  // then any platform credit the customer used) or as PLATFORM CREDIT.
   router.post('/orders/:id/refund', async (req, res) => {
     const o = getOrder(req);
     if (o.status !== 'picked_up') throw new HttpError(409, 'Only completed (charged) orders can be refunded. Cancel open orders instead.');
-    const remaining = o.total_cents - o.refunded_cents;
-    if (remaining <= 0) throw new HttpError(409, 'This order has already been fully refunded.');
-    const amount = req.body?.amount === undefined || req.body.amount === '' ? remaining : v.dollarsToCents(req.body.amount, 'Refund amount', { min: 0.01, max: remaining / 100 });
-    const reason = v.str(req.body?.reason, 'Reason', { min: 3, max: 300 });
-    await payments.refund(o.payment_ref, amount);
-    db.prepare(`UPDATE orders SET refunded_cents = refunded_cents + ?, refunded_at = ?, refund_reason = ? WHERE id = ?`)
-      .run(amount, new Date().toISOString(), reason, o.id);
-    audit(req, 'order.refund', 'order', o.id, `${dollars(amount)} - ${reason}`);
+    const refundable = o.total_cents - o.refunded_cents - o.credited_cents;
+    if (refundable <= 0) throw new HttpError(409, 'This order has already been fully refunded.');
+    const b = req.body || {};
+    let amount;
+    if (b.percent !== undefined && b.percent !== '' && b.percent !== null) {
+      const pct = v.int(Number(b.percent), 'Percentage', { min: 1, max: 100 });
+      amount = Math.max(1, Math.round((refundable * pct) / 100));
+    } else {
+      amount = v.dollarsToCents(b.amount, 'Refund amount', { min: 0.01, max: refundable / 100 });
+    }
+    const method = b.method === 'credit' ? 'credit' : 'original';
+    const reason = v.str(b.reason, 'Reason', { min: 3, max: 300 });
+
+    let cardCents = 0;
+    let creditCents = 0;
+    let providerRef = null;
+    if (method === 'credit') {
+      creditCents = amount;
+    } else {
+      const cardRefundable = o.payment_ref ? o.total_cents - o.credit_applied_cents - o.card_refunded_cents : 0;
+      cardCents = Math.min(amount, cardRefundable);
+      creditCents = amount - cardCents; // back to the credit balance they paid with
+      if (cardCents > 0) providerRef = (await payments.refund(o.payment_ref, cardCents))?.id || null;
+    }
+    transaction(db, () => {
+      if (creditCents > 0) {
+        credits.add(o.user_id, creditCents, method === 'credit' ? 'refund' : 'restore', { orderId: o.id, note: reason, by: req.user.id });
+      }
+      db.prepare(`UPDATE orders SET refunded_cents = refunded_cents + ?, card_refunded_cents = card_refunded_cents + ?,
+                  credited_cents = credited_cents + ?, refunded_at = ?, refund_reason = ? WHERE id = ?`)
+        .run(method === 'original' ? amount : 0, cardCents, method === 'credit' ? amount : 0, new Date().toISOString(), reason, o.id);
+      db.prepare(`INSERT INTO refunds (order_id, amount_cents, method, card_cents, credit_cents, reason, provider_ref, created_by)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(o.id, amount, method, cardCents, creditCents, reason, providerRef, req.user.id);
+    });
+    audit(req, method === 'credit' ? 'order.refund_credit' : 'order.refund', 'order', o.id,
+      `$${dollars(amount)} to ${method === 'credit' ? 'platform credit' : [cardCents && `card $${dollars(cardCents)}`, creditCents && `credit $${dollars(creditCents)}`].filter(Boolean).join(' + ')} - ${reason}`);
     res.json({ order: presentOrder(getOrder(req)) });
+  });
+
+  router.get('/orders/:id/refunds', (req, res) => {
+    const o = getOrder(req);
+    res.json({ refunds: db.prepare(`SELECT f.*, u.username AS by_name FROM refunds f LEFT JOIN users u ON u.id = f.created_by
+      WHERE f.order_id = ? ORDER BY f.id`).all(o.id) });
   });
 
   router.get('/orders/:id/receipt.pdf', async (req, res) => {
@@ -245,29 +305,66 @@ module.exports = function adminRoutes({ db, config, payments, orders, receipts, 
       .filter((x) => x.earnedCents || x.paidCents);
   }
 
+  // Invoice numbers, bank details and transaction IDs are assigned by the system and can't be edited.
+  const pad = (n, w) => String(n).padStart(w, '0');
+  const invoiceNumber = (id, at = new Date()) => `INV-${dayKey(at.toISOString()).replace(/-/g, '')}-${pad(id, 6)}`;
+  const transactionId = (id, restaurantId) => `TXN-${pad(id, 6)}-${pad(restaurantId, 4)}`;
+  const nextPayoutId = () => (db.prepare('SELECT COALESCE(MAX(id), 0) + 1 AS n FROM payouts').get().n);
+  const bankRow = (restaurantId) => db.prepare('SELECT * FROM bank_accounts WHERE restaurant_id = ?').get(restaurantId);
+  const bankSummary = (b) => (b ? `${b.bank_name} · ${b.account_type === 'savings' ? 'Savings' : 'Checking'} ••••${b.account_last4} · Routing ••••${b.routing_last4} · ${b.holder_name}` : null);
+
+  router.get('/payouts/next-invoice', (req, res) => {
+    const r = db.prepare('SELECT id FROM restaurants WHERE id = ?').get(Number(req.query.restaurantId));
+    if (!r) throw new HttpError(404, 'Restaurant not found.');
+    const id = nextPayoutId();
+    res.json({ invoiceNumber: invoiceNumber(id), transactionId: transactionId(id, r.id), bankDetails: bankSummary(bankRow(r.id)) });
+  });
+
+  // Full bank numbers, for sending the transfer. Every view is recorded in the audit log.
+  router.get('/restaurants/:id/bank', (req, res) => {
+    const r = db.prepare('SELECT id, name FROM restaurants WHERE id = ?').get(Number(req.params.id));
+    const b = r && bankRow(r.id);
+    if (!b) throw new HttpError(404, 'No bank account on file for this restaurant.');
+    audit(req, 'bank.reveal', 'restaurant', r.id, r.name);
+    res.json({ bank: { holderName: b.holder_name, bankName: b.bank_name, accountType: b.account_type,
+      routingNumber: cipher.decrypt(b.routing_enc), accountNumber: cipher.decrypt(b.account_enc), updatedAt: b.updated_at } });
+  });
+
   router.get('/payouts', (req, res) => {
     const history = db.prepare(`SELECT p.*, r.name AS restaurant_name, u.username AS created_by_name FROM payouts p
       JOIN restaurants r ON r.id = p.restaurant_id LEFT JOIN users u ON u.id = p.created_by ORDER BY p.paid_at DESC LIMIT 200`).all();
-    res.json({ balances: payoutRows(), history });
+    res.json({ balances: payoutRows().map((x) => ({ ...x, bankDetails: bankSummary(bankRow(x.restaurantId)) })), history });
   });
 
   router.post('/payouts', (req, res) => {
     const r = db.prepare('SELECT * FROM restaurants WHERE id = ?').get(Number(req.body?.restaurantId));
     if (!r) throw new HttpError(404, 'Restaurant not found.');
+    const bank = bankSummary(bankRow(r.id));
+    if (!bank) throw new HttpError(409, 'This restaurant has no payout bank account on file. Ask them to add it in their portal (Payouts tab).');
     const amount = v.dollarsToCents(req.body?.amount, 'Amount', { min: 0.01, max: 1000000 });
-    const reference = v.str(req.body?.reference, 'Reference', { max: 120, optional: true });
     const note = v.str(req.body?.note, 'Note', { max: 300, optional: true });
-    db.prepare('INSERT INTO payouts (restaurant_id, amount_cents, reference, note, created_by) VALUES (?, ?, ?, ?, ?)').run(r.id, amount, reference, note, req.user.id);
-    audit(req, 'payout.record', 'restaurant', r.id, `${r.name}: $${dollars(amount)}${reference ? ` (${reference})` : ''}`);
-    res.status(201).json({ ok: true });
+    // Any invoice number or bank details sent by the client are ignored.
+    const saved = transaction(db, () => {
+      const { lastInsertRowid } = db.prepare('INSERT INTO payouts (restaurant_id, amount_cents, note, created_by) VALUES (?, ?, ?, ?)')
+        .run(r.id, amount, note, req.user.id);
+      const id = Number(lastInsertRowid);
+      const out = { invoiceNumber: invoiceNumber(id), transactionId: transactionId(id, r.id), bankDetails: bank };
+      db.prepare('UPDATE payouts SET reference = ?, transaction_id = ?, bank_details = ? WHERE id = ?').run(out.invoiceNumber, out.transactionId, bank, id);
+      return out;
+    });
+    audit(req, 'payout.record', 'restaurant', r.id, `${r.name}: $${dollars(amount)} (${saved.invoiceNumber}, ${saved.transactionId})`);
+    res.status(201).json({ ok: true, ...saved });
   });
 
   router.get('/payouts.csv', (req, res) => {
     const rows = payoutRows();
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="BiteBack-payouts.csv"');
+    const history = db.prepare(`SELECT p.*, r.name AS restaurant_name FROM payouts p JOIN restaurants r ON r.id = p.restaurant_id ORDER BY p.paid_at`).all();
     res.send(toCsv([['Restaurant', 'City', 'Owner email', 'Completed orders', 'Earned', 'Paid', 'Balance owed', 'Last paid'],
-      ...rows.map((x) => [x.name, x.city, x.email, x.orders, dollars(x.earnedCents), dollars(x.paidCents), dollars(x.balanceCents), x.lastPaidAt || ''])]));
+      ...rows.map((x) => [x.name, x.city, x.email, x.orders, dollars(x.earnedCents), dollars(x.paidCents), dollars(x.balanceCents), x.lastPaidAt || '']),
+      [], ['Payout history'], ['Date', 'Invoice number', 'Restaurant', 'Amount', 'Bank details', 'Transaction ID', 'Note'],
+      ...history.map((p) => [p.paid_at, p.reference, p.restaurant_name, dollars(p.amount_cents), p.bank_details, p.transaction_id, p.note])]));
   });
 
   // ---------- Sales tax ----------
@@ -310,10 +407,10 @@ module.exports = function adminRoutes({ db, config, payments, orders, receipts, 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="BiteBack-orders-${r.from}-to-${r.to}.csv"`);
     res.send(toCsv([['Order #', 'Created', 'Picked up', 'Status', 'Customer', 'Restaurant', 'Item', 'Qty', 'Original unit', 'Discount %',
-      'Unit price', 'Food subtotal', 'Service fee', 'Sales tax', 'Total', 'Refunded', 'Card', 'Transaction ID'],
+      'Unit price', 'Food subtotal', 'Service fee', 'Sales tax', 'Total', 'Credit applied', 'Refunded to original payment', 'Refunded as platform credit', 'Card', 'Transaction ID'],
     ...rows.map((o) => [o.id, o.created_at, o.picked_up_at || '', o.status, o.username, o.restaurant_name, o.item_title, o.quantity,
       dollars(o.original_unit_price_cents), o.discount_pct, dollars(o.unit_price_cents), dollars(o.subtotal_cents), dollars(o.service_fee_cents),
-      dollars(o.tax_cents), dollars(o.total_cents), dollars(o.refunded_cents), o.card_label, o.payment_ref || ''])]));
+      dollars(o.tax_cents), dollars(o.total_cents), dollars(o.credit_applied_cents), dollars(o.refunded_cents), dollars(o.credited_cents), o.card_label, o.payment_ref || ''])]));
   });
 
   // ---------- Settings & audit ----------

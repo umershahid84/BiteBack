@@ -1,4 +1,4 @@
-import { api, $, esc, renderHeader, requireRole, showError, openModal, withBusy, toast } from './common.js';
+import { api, $, esc, money, fmtDateTime, renderHeader, requireRole, showError, openModal, withBusy, toast } from './common.js';
 import { createCardEntry, cardText } from './cards.js';
 
 const user = await requireRole('customer');
@@ -63,3 +63,13 @@ $('#add-card-btn').addEventListener('click', async () => {
 });
 
 load();
+
+const KIND = { refund: 'Refund issued as credit', goodwill: 'Credit from BiteBack', redeem: 'Used on order', restore: 'Returned to your credit', adjustment: 'Adjustment' };
+api('/credit').then(({ balanceCents, history }) => {
+  $('#credit-balance').textContent = money(balanceCents);
+  $('#credit-history').innerHTML = history.length ? `<table class="data" style="margin-top:12px"><tbody>${history.map((h) => `<tr>
+    <td class="small">${esc(fmtDateTime(h.created_at))}</td>
+    <td class="small">${esc(KIND[h.kind] || h.kind)}${h.order_id ? ` · <a href="/receipt?order=${h.order_id}">order #${h.order_id}</a>` : ''}${h.note ? `<div class="muted">${esc(h.note)}</div>` : ''}</td>
+    <td style="text-align:right;font-weight:700;color:${h.amount_cents < 0 ? 'var(--ink-2)' : 'var(--primary-ink)'}">${h.amount_cents < 0 ? '−' : '+'}${money(Math.abs(h.amount_cents))}</td></tr>`).join('')}</tbody></table>`
+    : '<p class="muted small" style="margin:12px 0 0">No credit activity yet.</p>';
+}).catch(() => {});

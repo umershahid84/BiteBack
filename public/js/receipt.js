@@ -46,13 +46,17 @@ try {
       <tr><td>Service fee (${r.serviceFeePct}%)</td><td>${money(r.serviceFeeCents)}</td></tr>
       <tr><td>WA sales tax (${pct(r.taxRateBps)})</td><td>${money(r.taxCents)}</td></tr>
       <tr class="grand"><td>Total</td><td>${money(r.totalCents)}</td></tr>
+      ${r.creditAppliedCents ? `<tr><td class="disc">Paid with platform credit</td><td class="disc">−${money(r.creditAppliedCents)}</td></tr>
+        <tr><td><b>Paid by card</b></td><td><b>${money(r.totalCents - r.creditAppliedCents)}</b></td></tr>` : ''}
     </table>
     <div class="p-pay">
-      <div><div class="p-label">Card</div><b>${esc(r.card || 'n/a')}</b></div>
+      <div><div class="p-label">Paid with</div><b>${esc(r.creditAppliedCents ? (r.creditAppliedCents >= r.totalCents ? 'Platform credit' : `${r.card} + platform credit`) : r.card || 'n/a')}</b></div>
       <div><div class="p-label">Payment status</div><b>${esc(r.paymentStatus)}</b></div>
-      <div><div class="p-label">Amount charged</div><b>${money(r.amountChargedCents)}</b>${r.refundedCents ? `<div class="disc small">Refunded ${money(r.refundedCents)} on ${esc(r.refundedAtText)}</div>` : ''}</div>
+      <div><div class="p-label">Charged to card</div><b>${money(r.amountChargedCents)}</b></div>
       <div><div class="p-label">Transaction ID</div><b style="word-break:break-all">${esc(r.paymentRef || 'n/a')}</b></div>
     </div>
+    ${r.refunds.length ? `<div class="p-label" style="margin-top:4px">Refunds</div>${r.refunds.map((f) => `<div class="small" style="margin-bottom:8px">
+      <b class="disc">${money(f.amountCents)}</b> to ${esc(f.to)}<div class="p-muted">${esc(f.atText)} · ${esc(f.reason)}</div></div>`).join('')}` : ''}
     ${r.pin ? `<div class="p-pin"><span>Pickup PIN: show at the counter</span><b>${esc(r.pin)}</b></div>` : ''}
     <p class="p-foot">Thank you for rescuing food with BiteBack! Your card is authorized when you order and charged only when the restaurant confirms pickup with your PIN.
       Orders not picked up are released without charge. Times shown in Pacific Time.</p>`;

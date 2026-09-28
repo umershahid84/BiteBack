@@ -78,9 +78,11 @@ function createReceiptService({ db, config }) {
       orderId: order.id,
       status: order.status,
       statusLabel: ORDER_STATUS[order.status] || order.status,
-      paymentStatus: order.refunded_cents
-        ? (order.refunded_cents >= order.total_cents ? 'Refunded in full' : `Paid, partially refunded (${money(order.refunded_cents)})`)
-        : PAYMENT_STATUS[order.status] || order.status,
+      paymentStatus: (order.refunded_cents || 0) + (order.credited_cents || 0) >= order.total_cents && order.status === 'picked_up'
+        ? 'Refunded in full'
+        : order.refunded_cents || order.credited_cents
+          ? `Paid, partially refunded (${money((order.refunded_cents || 0) + (order.credited_cents || 0))})`
+          : PAYMENT_STATUS[order.status] || order.status,
       orderedAt: order.created_at,
       pickedUpAt: order.picked_up_at,
       closedAt: order.closed_at,
@@ -108,8 +110,17 @@ function createReceiptService({ db, config }) {
       taxRateBps: order.tax_rate_bps,
       taxCents: order.tax_cents,
       totalCents: order.total_cents,
-      amountChargedCents: order.status === 'picked_up' ? order.total_cents : 0,
-      refundedCents: order.refunded_cents || 0,
+      creditAppliedCents: order.credit_applied_cents || 0,
+      amountChargedCents: order.status === 'picked_up' ? order.total_cents - (order.credit_applied_cents || 0) : 0,
+      refundedCents: (order.refunded_cents || 0) + (order.credited_cents || 0),
+      refunds: db.prepare('SELECT amount_cents, method, card_cents, credit_cents, reason, created_at FROM refunds WHERE order_id = ? ORDER BY id').all(order.id)
+        .map((f) => ({
+          amountCents: f.amount_cents,
+          to: f.method === 'credit' ? 'BiteBack platform credit'
+            : [f.card_cents && `${order.card_label} (${money(f.card_cents)})`, f.credit_cents && `platform credit (${money(f.credit_cents)})`].filter(Boolean).join(' + '),
+          reason: f.reason,
+          atText: formatDateTime(f.created_at, timeZone),
+        })),
       refundedAtText: formatDateTime(order.refunded_at, timeZone),
       card: order.card_label,
       paymentRef: order.payment_ref || '',
@@ -202,15 +213,19 @@ function createReceiptService({ db, config }) {
     rule(doc, tx, R, y - 3);
     y += 4;
     totalRow('Total', money(rc.totalCents), { bold: true, size: 14 });
+    if (rc.creditAppliedCents) {
+      totalRow('Paid with platform credit', money(-rc.creditAppliedCents), { color: GREEN });
+      totalRow('Paid by card', money(rc.totalCents - rc.creditAppliedCents), { bold: true });
+    }
     y += 6;
 
     // Payment block
     doc.roundedRect(L, y, W, 78, 8).lineWidth(1).strokeColor(LINE).stroke();
     label(doc, 'PAYMENT', L + 14, y + 12);
     const pay = [
-      ['Card', rc.card || 'n/a'],
+      ['Paid with', rc.creditAppliedCents ? (rc.creditAppliedCents >= rc.totalCents ? 'Platform credit' : `${rc.card} + platform credit`) : rc.card || 'n/a'],
       ['Payment status', rc.paymentStatus],
-      ['Amount charged', rc.refundedCents ? `${money(rc.amountChargedCents)} (refunded ${money(rc.refundedCents)})` : money(rc.amountChargedCents)],
+      ['Charged to card', money(rc.amountChargedCents)],
       ['Transaction ID', rc.paymentRef || 'n/a'],
     ];
     pay.forEach(([k, v], i) => {
@@ -220,6 +235,18 @@ function createReceiptService({ db, config }) {
       doc.font('medium').fillColor(INK).text(v, { width: W / 2 - 24 });
     });
     y += 96;
+
+    if (rc.refunds.length) {
+      label(doc, 'REFUNDS', L, y);
+      y += 14;
+      for (const f of rc.refunds) {
+        doc.font('medium').fontSize(9.5).fillColor(GREEN).text(`${money(f.amountCents)} to ${f.to}`, L, y, { width: W });
+        y += 13;
+        doc.font('regular').fontSize(8.5).fillColor(MUTED).text(`${f.atText} · ${f.reason}`, L, y, { width: W });
+        y += 16;
+      }
+      y += 6;
+    }
 
     if (rc.pin) {
       doc.roundedRect(L, y, W, 40, 8).fill('#ecfdf5');

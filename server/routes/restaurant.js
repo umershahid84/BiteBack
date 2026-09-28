@@ -3,8 +3,9 @@ const v = require('../validate');
 const { HttpError, bad } = require('../errors');
 const { requireRole, createLimiter } = require('../auth');
 const { lookupZip } = require('../areas');
+const { validRouting } = require('../secure');
 
-module.exports = function restaurantRoutes({ db, orders, images, receipts, terms }) {
+module.exports = function restaurantRoutes({ db, orders, images, receipts, terms, cipher }) {
   const router = express.Router();
   router.use(requireRole('restaurant'), terms.gate);
 
@@ -286,6 +287,47 @@ module.exports = function restaurantRoutes({ db, orders, images, receipts, terms
       clearInterval(ping);
       orders.events.off('reserved', onReserved);
     });
+  });
+
+  // ---- Payout bank account & payouts ----
+
+  const maskedBank = (b) => (b ? { holderName: b.holder_name, bankName: b.bank_name, accountType: b.account_type,
+    routingLast4: b.routing_last4, accountLast4: b.account_last4, updatedAt: b.updated_at } : null);
+
+  router.get('/bank', (req, res) => {
+    res.json({ bank: maskedBank(db.prepare('SELECT * FROM bank_accounts WHERE restaurant_id = ?').get(req.restaurant.id)) });
+  });
+
+  router.put('/bank', (req, res) => {
+    const b = req.body || {};
+    const holder = v.str(b.holderName, 'Account holder name', { min: 2, max: 100 });
+    const bankName = v.str(b.bankName, 'Bank name', { min: 2, max: 80 });
+    const type = b.accountType === 'savings' ? 'savings' : 'checking';
+    const routing = String(b.routingNumber || '').replace(/\D/g, '');
+    const account = String(b.accountNumber || '').replace(/\D/g, '');
+    if (!validRouting(routing)) throw bad('Please enter a valid 9-digit ABA routing number.');
+    if (!/^\d{4,17}$/.test(account)) throw bad('Account number must be 4 to 17 digits.');
+    if (String(b.accountNumberConfirm || '').replace(/\D/g, '') !== account) throw bad('The account numbers do not match.');
+    db.prepare(`INSERT INTO bank_accounts (restaurant_id, holder_name, bank_name, account_type, routing_enc, account_enc, routing_last4, account_last4, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(restaurant_id) DO UPDATE SET holder_name = excluded.holder_name, bank_name = excluded.bank_name,
+                  account_type = excluded.account_type, routing_enc = excluded.routing_enc, account_enc = excluded.account_enc,
+                  routing_last4 = excluded.routing_last4, account_last4 = excluded.account_last4, updated_at = excluded.updated_at`)
+      .run(req.restaurant.id, holder, bankName, type, cipher.encrypt(routing), cipher.encrypt(account), routing.slice(-4), account.slice(-4), new Date().toISOString());
+    res.json({ bank: maskedBank(db.prepare('SELECT * FROM bank_accounts WHERE restaurant_id = ?').get(req.restaurant.id)) });
+  });
+
+  router.get('/payouts', (req, res) => {
+    const id = req.restaurant.id;
+    let earned = 0;
+    for (const o of db.prepare("SELECT subtotal_cents, total_cents, refunded_cents FROM orders WHERE restaurant_id = ? AND status = 'picked_up'").all(id)) {
+      // Refunds to the customer's original payment reduce earnings; platform-credit refunds don't.
+      earned += o.subtotal_cents - (o.refunded_cents && o.total_cents ? Math.round((o.refunded_cents * o.subtotal_cents) / o.total_cents) : 0);
+    }
+    const history = db.prepare(`SELECT reference AS invoice_number, amount_cents, bank_details, transaction_id, paid_at FROM payouts
+      WHERE restaurant_id = ? ORDER BY paid_at DESC`).all(id);
+    const paid = history.reduce((n, p) => n + p.amount_cents, 0);
+    res.json({ earnedCents: earned, paidCents: paid, balanceCents: earned - paid, history });
   });
 
   // ---- Daily report ----

@@ -4,12 +4,17 @@ const crypto = require('node:crypto');
 const { EventEmitter } = require('node:events');
 const { transaction } = require('./db');
 const { quote } = require('./pricing');
+const { createCredits } = require('./credits');
 const { HttpError, bad } = require('./errors');
 
 // Customers can order up to whatever the restaurant has left; this is only a sanity cap.
 const MAX_PER_ORDER = 500;
 
+// Card payments below this can't be processed; customers must use more credit or pay more by card.
+const MIN_CARD_CHARGE_CENTS = 50;
+
 function createOrderService({ db, config, payments }) {
+  const credits = createCredits(db);
   const nowIso = () => new Date().toISOString();
   // Emits 'reserved' (order) when a customer's payment hold succeeds, so restaurants can be alerted live.
   const events = new EventEmitter();
@@ -63,19 +68,30 @@ function createOrderService({ db, config, payments }) {
   }
 
   // Step 1: reserve the food and create a pending order (synchronous, so no oversell).
-  function reserve({ userId, offerId, quantity, cardLabel }) {
+  // creditCents: platform credit the customer chose to apply (reserved now, restored if the order doesn't complete).
+  function reserve({ userId, offerId, quantity, cardLabel, creditCents = 0 }) {
     return transaction(db, () => {
       const offer = getOffer.get(offerId);
       assertOrderable(offer, quantity);
       const q = priceFor(offer, quantity);
+      if (!Number.isInteger(creditCents) || creditCents < 0) throw bad('Invalid credit amount.');
+      if (creditCents > q.totalCents) throw bad('You can apply at most the order total in credit.');
+      if (creditCents > credits.balance(userId)) throw new HttpError(409, 'You don\'t have that much platform credit.');
+      const cardCents = q.totalCents - creditCents;
+      if (cardCents > 0 && cardCents < MIN_CARD_CHARGE_CENTS) {
+        throw bad('The amount left for your card must be at least $0.50. Apply a little more or less credit.');
+      }
+      if (cardCents > 0 && !cardLabel) throw bad('Please choose a card for the rest of the total.');
       db.prepare('UPDATE offers SET quantity_available = quantity_available - ? WHERE id = ?').run(quantity, offer.id);
       const { lastInsertRowid } = db.prepare(`
         INSERT INTO orders (user_id, offer_id, restaurant_id, item_title, quantity, unit_price_cents, original_unit_price_cents,
-          discount_pct, subtotal_cents, service_fee_cents, tax_rate_bps, tax_cents, total_cents, pin, status, card_label, pickup_end)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?)`)
+          discount_pct, subtotal_cents, service_fee_cents, tax_rate_bps, tax_cents, total_cents, pin, status, card_label, pickup_end,
+          credit_applied_cents)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?, ?)`)
         .run(userId, offer.id, offer.restaurant_id, offer.title, quantity, q.unitPriceCents, q.originalUnitCents, q.discountPct,
-          q.subtotalCents, q.serviceFeeCents, q.taxRateBps, q.taxCents, q.totalCents, uniquePin(offer.restaurant_id), cardLabel,
-          offer.pickup_end);
+          q.subtotalCents, q.serviceFeeCents, q.taxRateBps, q.taxCents, q.totalCents, uniquePin(offer.restaurant_id),
+          cardCents > 0 ? cardLabel : 'Platform credit', offer.pickup_end, creditCents);
+      if (creditCents) credits.add(userId, -creditCents, 'redeem', { orderId: Number(lastInsertRowid), note: 'Applied to order' });
       return { order: getOrder.get(lastInsertRowid), offer };
     });
   }
@@ -86,10 +102,16 @@ function createOrderService({ db, config, payments }) {
 
   // Step 2: place a hold on the card for the order total.
   async function authorize(order, { customerId, paymentRef, attached }) {
+    const cardCents = order.total_cents - order.credit_applied_cents;
+    if (cardCents === 0) {
+      // Paid entirely with platform credit: nothing to authorize.
+      markReserved(order.id);
+      return { status: 'authorized', ref: null };
+    }
     let result;
     try {
       result = await payments.authorize({
-        amountCents: order.total_cents,
+        amountCents: cardCents,
         customerId,
         paymentRef,
         attached,
@@ -120,6 +142,9 @@ function createOrderService({ db, config, payments }) {
     const changed = transaction(db, () => {
       const { changes } = setStatus.run(to, nowIso(), orderId, from);
       if (changes && doRestock) restock.run(order.quantity, order.offer_id, nowIso());
+      if (changes && order.credit_applied_cents) {
+        credits.add(order.user_id, order.credit_applied_cents, 'restore', { orderId, note: `Order ${to}: credit returned` });
+      }
       return changes > 0;
     });
     if (changed && order.payment_ref) await payments.void(order.payment_ref);
@@ -134,7 +159,7 @@ function createOrderService({ db, config, payments }) {
     if (capturing.has(order.id)) throw new HttpError(409, 'This order is already being processed.');
     capturing.add(order.id);
     try {
-      await payments.capture(order.payment_ref);
+      if (order.payment_ref) await payments.capture(order.payment_ref);
       db.prepare(`UPDATE orders SET status = 'picked_up', picked_up_at = ?, closed_at = ? WHERE id = ? AND status = 'reserved'`)
         .run(nowIso(), nowIso(), order.id);
     } finally {
@@ -159,7 +184,7 @@ function createOrderService({ db, config, payments }) {
     return { stalePending: stalePending.length, missed: missed.length };
   }
 
-  return { events, quoteOffer, reserve, authorize, confirmAuthorization, release, completePickup, sweep, getOrder: (id) => getOrder.get(id) };
+  return { credits, events, quoteOffer, reserve, authorize, confirmAuthorization, release, completePickup, sweep, getOrder: (id) => getOrder.get(id) };
 }
 
 module.exports = { createOrderService, MAX_PER_ORDER };

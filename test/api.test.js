@@ -574,8 +574,24 @@ test('admin console: approvals, suspensions, refunds, payouts, tax, settings and
   const bal = r.body.balances.find((b) => b.restaurantId === rid);
   const foodRefund = Math.round((500 * order.subtotalCents) / order.totalCents);
   assert.equal(bal.earnedCents, order.subtotalCents - foodRefund);
-  r = await admin('/admin/payouts', { method: 'POST', body: { restaurantId: rid, amount: (bal.earnedCents / 100).toFixed(2), reference: 'ACH-1' } });
+  r = await admin('/admin/payouts', { method: 'POST', body: { restaurantId: rid, amount: '1.00' } });
+  assert.equal(r.status, 409, 'bank account required before paying');
+  await shop('/restaurant/bank', { method: 'PUT', body: { holderName: 'Shop LLC', bankName: 'Chase', accountType: 'checking',
+    routingNumber: '021000021', accountNumber: '000123456789', accountNumberConfirm: '000123456789' } });
+  const preview = (await admin(`/admin/payouts/next-invoice?restaurantId=${rid}`)).body;
+  assert.match(preview.invoiceNumber, /^INV-\d{8}-000001$/);
+  assert.match(preview.bankDetails, /Chase · Checking ••••6789 · Routing ••••0021 · Shop LLC/);
+  r = await admin('/admin/payouts', { method: 'POST', body: { restaurantId: rid, amount: (bal.earnedCents / 100).toFixed(2),
+    invoiceNumber: 'MINE', reference: 'MINE', bankDetails: 'fake', transactionId: 'fake' } });
   assert.equal(r.status, 201);
+  assert.equal(r.body.invoiceNumber, preview.invoiceNumber, 'system-assigned invoice number, client value ignored');
+  assert.equal(r.body.transactionId, preview.transactionId);
+  assert.equal(r.body.bankDetails, preview.bankDetails);
+  const hist = (await admin('/admin/payouts')).body.history[0];
+  assert.deepEqual([hist.reference, hist.transaction_id, hist.bank_details], [preview.invoiceNumber, preview.transactionId, preview.bankDetails]);
+  r = await shop('/restaurant/payouts');
+  assert.equal(r.body.history[0].invoice_number, preview.invoiceNumber);
+  assert.equal(r.body.balanceCents, 0);
   r = await admin('/admin/payouts');
   assert.equal(r.body.balances.find((b) => b.restaurantId === rid).balanceCents, 0);
 
@@ -597,4 +613,105 @@ test('admin console: approvals, suspensions, refunds, payouts, tax, settings and
   r = await admin('/admin/audit');
   const actions = r.body.entries.map((e) => e.action);
   for (const a of ['settings.update', 'restaurant.approved', 'order.refund', 'payout.record', 'user.suspended', 'restaurant.suspended']) assert.ok(actions.includes(a), a);
+});
+
+test('refund methods, platform credit, and restaurant bank accounts', async (t) => {
+  const env = await setup();
+  t.after(() => env.server.close());
+  const { hashPassword } = require('../server/auth');
+  env.db.prepare("INSERT INTO users (email, username, password_hash, role) VALUES ('o@x.com', 'owner', ?, 'admin')").run(hashPassword('ownerpass1'));
+  const admin = env.client();
+  await admin('/auth/login', { method: 'POST', body: { login: 'owner', password: 'ownerpass1' } });
+  const shop = env.client();
+  await shop('/auth/signup', { method: 'POST', body: { role: 'restaurant', email: 's@x.com', username: 'shop', password: 'secret123',
+    restaurant: { name: 'Shop', address: '1 Main St', city: 'Kent', zip: '98032' } } });
+  const rid = env.db.prepare('SELECT id FROM restaurants').get().id;
+  const item = await menuItem(shop, 'Bowl', 20);
+  const offerId = (await shop('/restaurant/offers', { method: 'POST', body: { menuItemId: item, reason: 'other', discountPct: 50, quantity: 20, expiresInMinutes: 120 } })).body.offer.id;
+  const c = env.client();
+  await c('/auth/signup', { method: 'POST', body: { email: 'c@x.com', username: 'cust', password: 'password1' } });
+  const custId = env.db.prepare("SELECT id FROM users WHERE username = 'cust'").get().id;
+  const pickup = async (pin) => shop('/restaurant/pickup/confirm', { method: 'POST', body: { pin } });
+  const earned = async () => (await admin('/admin/payouts')).body.balances.find((b) => b.restaurantId === rid)?.earnedCents || 0;
+
+  // 1) Card order, refunded 50% as PLATFORM CREDIT: customer gets credit, restaurant keeps full sale.
+  let r = await c('/orders', { method: 'POST', body: { offerId, quantity: 2, newCard: { token: card(), save: true } } });
+  const o1 = r.body.order;
+  await pickup(o1.pin);
+  const fullEarn = await earned();
+  assert.equal(fullEarn, o1.subtotalCents);
+  r = await admin(`/admin/orders/${o1.id}/refund`, { method: 'POST', body: { percent: 50, method: 'credit', reason: 'Late pickup goodwill' } });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const credit1 = Math.round(o1.totalCents / 2);
+  assert.equal(r.body.order.creditedCents, credit1);
+  assert.equal((await c('/credit')).body.balanceCents, credit1);
+  assert.equal((await c('/auth/me')).body.user.creditCents, credit1, 'balance visible to the customer');
+  assert.equal(await earned(), fullEarn, 'credit refund does not reduce restaurant earnings');
+  assert.equal(env.captured.length, 1);
+
+  // 2) Refund the rest to the ORIGINAL card: restaurant loses that share.
+  r = await admin(`/admin/orders/${o1.id}/refund`, { method: 'POST', body: { percent: 100, method: 'original', reason: 'Wrong item' } });
+  const cardBack = o1.totalCents - credit1;
+  assert.equal(r.body.order.cardRefundedCents, cardBack);
+  assert.equal(await earned(), fullEarn - Math.round((cardBack * o1.subtotalCents) / o1.totalCents));
+  r = await admin(`/admin/orders/${o1.id}/refund`, { method: 'POST', body: { amount: '1', reason: 'again' } });
+  assert.equal(r.status, 409, 'nothing left to refund');
+  r = await c(`/orders/${o1.id}/receipt`);
+  assert.equal(r.body.receipt.refunds.length, 2);
+  assert.match(r.body.receipt.refunds[0].to, /platform credit/);
+  assert.match(r.body.receipt.refunds[1].to, /VISA •••• 4242/);
+
+  // 3) Use part of the credit on a new order; the card is charged the rest. Cancel returns the credit.
+  r = await c('/orders', { method: 'POST', body: { offerId, quantity: 1, creditCents: 500, cardId: 1 } });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const o2 = r.body.order;
+  assert.equal(o2.creditAppliedCents, 500);
+  assert.equal((await c('/credit')).body.balanceCents, credit1 - 500);
+  await c(`/orders/${o2.id}/cancel`, { method: 'POST' });
+  assert.equal((await c('/credit')).body.balanceCents, credit1, 'credit restored on cancel');
+
+  // 4) Too much credit / tiny card remainder are rejected.
+  r = await c('/orders', { method: 'POST', body: { offerId, quantity: 1, creditCents: credit1 + 1, cardId: 1 } });
+  assert.ok([400, 409].includes(r.status));
+  const q = (await c('/quote', { method: 'POST', body: { offerId, quantity: 1 } })).body.quote;
+  env.db.prepare("INSERT INTO credit_ledger (user_id, amount_cents, kind) VALUES (?, 5000, 'goodwill')").run(custId);
+  r = await c('/orders', { method: 'POST', body: { offerId, quantity: 1, creditCents: q.totalCents - 10, cardId: 1 } });
+  assert.equal(r.status, 400);
+  assert.match(r.body.error, /at least \$0\.50/);
+
+  // 5) Order paid entirely with credit: no card needed, nothing captured; restaurant still earns the full subtotal.
+  const captures = env.captured.length;
+  r = await c('/orders', { method: 'POST', body: { offerId, quantity: 1, creditCents: q.totalCents } });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const o3 = r.body.order;
+  assert.equal(o3.cardLabel, 'Platform credit');
+  const beforeEarn = await earned();
+  await pickup(o3.pin);
+  assert.equal(env.captured.length, captures, 'no card capture');
+  assert.equal(await earned(), beforeEarn + o3.subtotalCents);
+  // Refund to original payment = back to credit, and the restaurant loses the sale.
+  const bal = (await c('/credit')).body.balanceCents;
+  r = await admin(`/admin/orders/${o3.id}/refund`, { method: 'POST', body: { percent: 100, method: 'original', reason: 'Spoiled' } });
+  assert.equal(r.body.order.cardRefundedCents, 0);
+  assert.equal((await c('/credit')).body.balanceCents, bal + o3.totalCents);
+  assert.equal(await earned(), beforeEarn);
+
+  // 6) Goodwill credit from the owner.
+  r = await admin(`/admin/users/${custId}/credit`, { method: 'POST', body: { amount: '7.50', reason: 'Sorry for the wait' } });
+  assert.equal(r.body.balanceCents, bal + o3.totalCents + 750);
+
+  // 7) Bank account: validation, masking, owner-only reveal (audited).
+  r = await shop('/restaurant/bank', { method: 'PUT', body: { holderName: 'Shop LLC', bankName: 'Chase', routingNumber: '123456789', accountNumber: '12345678', accountNumberConfirm: '12345678' } });
+  assert.equal(r.status, 400, 'bad routing checksum');
+  r = await shop('/restaurant/bank', { method: 'PUT', body: { holderName: 'Shop LLC', bankName: 'Chase', routingNumber: '021000021', accountNumber: '12345678', accountNumberConfirm: '12345679' } });
+  assert.equal(r.status, 400, 'confirmation mismatch');
+  r = await shop('/restaurant/bank', { method: 'PUT', body: { holderName: 'Shop LLC', bankName: 'Chase', accountType: 'savings', routingNumber: '021000021', accountNumber: '12345678', accountNumberConfirm: '12345678' } });
+  assert.deepEqual([r.body.bank.accountLast4, r.body.bank.routingLast4, r.body.bank.accountNumber], ['5678', '0021', undefined]);
+  const stored = env.db.prepare('SELECT * FROM bank_accounts').get();
+  assert.ok(!JSON.stringify(stored).includes('12345678'), 'stored encrypted');
+  r = await c(`/admin/restaurants/${rid}/bank`);
+  assert.equal(r.status, 403);
+  r = await admin(`/admin/restaurants/${rid}/bank`);
+  assert.equal(r.body.bank.accountNumber, '12345678');
+  assert.ok((await admin('/admin/audit')).body.entries.some((e) => e.action === 'bank.reveal'));
 });

@@ -146,10 +146,17 @@ async function openCheckout(offer) {
     <div class="summary-box"><table class="breakdown" id="breakdown"></table></div>
 
     <div class="section-label">Payment</div>
+    <div id="credit-box" class="credit-box hidden">
+      <label class="check"><input type="checkbox" id="use-credit" checked> <span>Use my BiteBack credit · <b id="credit-avail"></b> available</span></label>
+      <div class="timer-custom" id="credit-amt-row"><span class="muted">Apply $</span><input id="credit-amt" inputmode="decimal" style="width:120px">
+        <span class="muted small" id="credit-hint"></span></div>
+    </div>
+    <div id="card-section">
     <div id="pay-options"></div>
     <div id="new-card" class="card-entry hidden">
       <div id="card-mount"></div>
       <label class="check" style="margin-top:8px"><input type="checkbox" id="save-card" checked> Save this card for future orders</label>
+    </div>
     </div>
     <p class="small muted" style="margin:12px 0">🔒 We'll place a temporary hold for the total now. <b>Your card is charged only when you pick up</b> and the restaurant enters your PIN.</p>
     <div id="co-msg"></div>
@@ -159,6 +166,28 @@ async function openCheckout(offer) {
   let quantity = 1;
   // The restaurant decides how many are available; customers can't order more than that.
   const max = offer.quantityAvailable;
+  let lastTotal = 0;
+  let creditBalance = 0;
+  let creditTouched = false;
+
+  // Platform credit: customers choose whether and how much to apply; the card covers the rest.
+  const creditCents = () => {
+    if (!creditBalance || !$('#use-credit', body).checked) return 0;
+    const typed = Math.round(Number($('#credit-amt', body).value.replace(/[$,]/g, '')) * 100) || 0;
+    return Math.max(0, Math.min(typed, creditBalance, lastTotal));
+  };
+  function syncCredit() {
+    const credit = creditCents();
+    const card = lastTotal - credit;
+    $('#credit-amt-row', body).classList.toggle('hidden', !$('#use-credit', body).checked);
+    $('#credit-hint', body).textContent = `up to ${money(Math.min(creditBalance, lastTotal))}`;
+    $('#card-section', body).classList.toggle('hidden', card === 0);
+    const rows = $('#credit-rows', body);
+    if (rows) rows.innerHTML = credit
+      ? `<tr><td class="save">BiteBack credit applied</td><td class="save">−${money(credit)}</td></tr>
+         <tr class="total"><td>${card ? 'Card (charged at pickup)' : 'Due'}</td><td>${money(card)}</td></tr>` : '';
+    $('#place-btn', body).textContent = card ? `Place order · ${money(card)}${credit ? ' + credit' : ''}` : 'Place order · paid with credit';
+  }
 
   async function refreshQuote() {
     $('#qty', body).textContent = quantity;
@@ -174,8 +203,11 @@ async function openCheckout(offer) {
         <tr><td colspan="2" class="save">You save ${money(q.savingsCents)} (${q.discountPct}% off)</td></tr>
         <tr><td>Service fee (${pct(q.serviceFeeBps)})</td><td>${money(q.serviceFeeCents)}</td></tr>
         <tr><td>WA sales tax (${pct(q.taxRateBps)})</td><td>${money(q.taxCents)}</td></tr>
-        <tr class="total"><td>Total</td><td>${money(q.totalCents)}</td></tr>`;
-      $('#place-btn', body).textContent = `Place order · ${money(q.totalCents)}`;
+        <tr class="total"><td>Total</td><td>${money(q.totalCents)}</td></tr>
+        <tbody id="credit-rows"></tbody>`;
+      lastTotal = q.totalCents;
+      if (creditBalance && !creditTouched) $('#credit-amt', body).value = (Math.min(creditBalance, lastTotal) / 100).toFixed(2);
+      syncCredit();
       showError($('#co-msg', body), null);
     } catch (err) {
       showError($('#co-msg', body), err);
@@ -187,8 +219,15 @@ async function openCheckout(offer) {
     refreshQuote();
   }));
 
-  // Payment options: saved cards + new card.
-  const { cards } = await api('/cards');
+  // Payment options: platform credit, saved cards, new card.
+  const [{ cards }, credit] = await Promise.all([api('/cards'), api('/credit')]);
+  creditBalance = credit.balanceCents;
+  if (creditBalance > 0) {
+    $('#credit-box', body).classList.remove('hidden');
+    $('#credit-avail', body).textContent = money(creditBalance);
+    $('#use-credit', body).addEventListener('change', syncCredit);
+    $('#credit-amt', body).addEventListener('input', () => { creditTouched = true; syncCredit(); });
+  }
   $('#pay-options', body).innerHTML = cards.map((c, i) => `
       <label class="pay-option"><input type="radio" name="pay" value="${c.id}" ${i === 0 ? 'checked' : ''}> 💳 ${cardText(c)}
         <span class="muted small">exp ${String(c.exp_month).padStart(2, '0')}/${String(c.exp_year).slice(-2)}</span></label>`).join('') +
@@ -203,9 +242,10 @@ async function openCheckout(offer) {
     const coMsg = $('#co-msg', body);
     try {
       const choice = body.querySelector('input[name=pay]:checked').value;
-      const payload = { offerId: offer.id, quantity };
-      if (choice === 'new') payload.newCard = { token: await cardEntry.getToken(), save: $('#save-card', body).checked };
-      else payload.cardId = Number(choice);
+      const payload = { offerId: offer.id, quantity, creditCents: creditCents() };
+      const needsCard = payload.creditCents < lastTotal; // no card when credit covers the whole total
+      if (needsCard && choice === 'new') payload.newCard = { token: await cardEntry.getToken(), save: $('#save-card', body).checked };
+      else if (needsCard) payload.cardId = Number(choice);
 
       let { order, requiresAction, clientSecret } = await api('/orders', { method: 'POST', body: payload });
       if (requiresAction) {

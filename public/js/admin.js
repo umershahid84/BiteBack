@@ -68,7 +68,11 @@ async function overview(panel) {
       <div class="kpi"><b>${t.ordersPickedUp}</b><span>Orders picked up</span></div>
       <div class="kpi"><b>${t.mealsRescued}</b><span>Meals rescued from waste</span></div>
       <div class="kpi"><b>${money(t.discountsCents)}</b><span>Customer savings</span></div>
-      <div class="kpi"><b>${money(t.refundsCents)}</b><span>Refunds</span></div>
+      <div class="kpi"><b>${money(t.refundsCents)}</b><span>Refunds to original payment</span></div>
+      <div class="kpi"><b>${money(t.creditRefundsCents)}</b><span>Refunds as platform credit (your cost)</span></div>
+      <div class="kpi"><b>${money(t.creditRedeemedCents)}</b><span>Platform credit used on orders</span></div>
+      <div class="kpi"><b>${money(t.cardChargedCents)}</b><span>Charged to cards (net)</span></div>
+      <div class="kpi"><b>${money(n.creditOutstandingCents)}</b><span>Platform credit outstanding</span></div>
     </div>
     <div class="card chart-card">
       <div class="row"><h3 style="margin:0">Daily total charged</h3><span class="spacer"></span><span class="muted small">Hover a bar for details</span></div>
@@ -198,12 +202,12 @@ async function customers(panel) {
   const load = async () => {
     const { users } = await api(`/admin/users?role=${$('#c-role', panel).value}&q=${encodeURIComponent($('#c-q', panel).value)}`);
     $('#c-list', panel).innerHTML = users.length ? `<div class="card table-wrap" style="padding:8px"><table class="data">
-      <thead><tr><th>User</th><th>Status</th><th>Completed orders</th><th>Spent</th><th>No-shows</th><th>Terms accepted</th><th>Joined</th><th></th></tr></thead>
+      <thead><tr><th>User</th><th>Status</th><th>Completed orders</th><th>Spent</th><th>Platform credit</th><th>No-shows</th><th>Terms accepted</th><th>Joined</th><th></th></tr></thead>
       <tbody>${users.map((u) => `<tr>
         <td><b>${esc(u.username)}</b><div class="muted small">${esc(u.email)}</div></td>
-        <td>${pill(u.status)}</td><td>${u.orders}</td><td>${money(u.spent_cents)}</td><td>${u.no_shows}</td>
+        <td>${pill(u.status)}</td><td>${u.orders}</td><td>${money(u.spent_cents)}</td><td>${u.role === 'customer' ? `<b>${money(u.credit_cents)}</b>` : ''}</td><td>${u.no_shows}</td>
         <td class="small">${u.terms_accepted_at ? esc(day(u.terms_accepted_at)) : '<span class="muted">n/a</span>'}</td><td class="small">${esc(day(u.created_at))}</td>
-        <td>${u.role === 'admin' ? '' : u.status === 'active'
+        <td style="white-space:nowrap">${u.role === 'customer' ? `<button class="btn btn-ghost btn-sm" data-credit="${u.id}" data-name="${esc(u.username)}">+ Credit</button> ` : ''}${u.role === 'admin' ? '' : u.status === 'active'
           ? `<button class="btn btn-danger btn-sm" data-user="${u.id}" data-status="suspended">Suspend</button>`
           : `<button class="btn btn-ghost btn-sm" data-user="${u.id}" data-status="active">Reactivate</button>`}</td></tr>`).join('')}</tbody></table></div>`
       : '<div class="empty"><h3>No users match</h3></div>';
@@ -211,6 +215,21 @@ async function customers(panel) {
   panel.addEventListener('input', debounce(load));
   panel.addEventListener('change', load);
   panel.onclick = async (e) => {
+    const cr = e.target.closest('[data-credit]');
+    if (cr) {
+      const m = openModal(`Issue platform credit · ${cr.dataset.name}`, `
+        <div class="field"><label for="gc-amt">Amount ($)</label><input id="gc-amt" inputmode="decimal" placeholder="5.00"></div>
+        <div class="field"><label for="gc-reason">Reason</label><input id="gc-reason" maxlength="300" placeholder="e.g. Sorry for the wait"></div>
+        <p class="small muted">Platform credit is paid by you (BiteBack). Restaurants receive their full payment when it's used.</p>
+        <div id="gc-msg"></div><button class="btn btn-primary btn-block" id="gc-go">Issue credit</button>`);
+      $('#gc-go', m.body).addEventListener('click', (ev) => withBusy(ev.currentTarget, async () => {
+        try {
+          await api(`/admin/users/${cr.dataset.credit}/credit`, { method: 'POST', body: { amount: $('#gc-amt', m.body).value, reason: $('#gc-reason', m.body).value } });
+          m.close(); toast('Credit issued'); load();
+        } catch (err) { showError($('#gc-msg', m.body), err); }
+      }));
+      return;
+    }
     const b = e.target.closest('[data-user]');
     if (!b) return;
     if (b.dataset.status === 'suspended' && !confirm('Suspend this account? They will be signed out and unable to log in.')) return;
@@ -235,12 +254,14 @@ async function orders(panel) {
         <td>${o.id}</td><td class="small">${esc(fmtDateTime(o.createdAt))}</td>
         <td class="small">${esc(o.customer)}<div class="muted">${esc(o.customerEmail)}</div></td><td class="small">${esc(o.restaurant)}</td>
         <td class="small">${o.quantity} × ${esc(o.itemTitle)}<div class="muted">${money(o.unitPriceCents)} (${o.discountPct}% off ${money(o.originalUnitPriceCents)})</div></td>
-        <td><b>${money(o.totalCents)}</b>${o.refundedCents ? `<div class="small" style="color:var(--danger)">−${money(o.refundedCents)} refunded</div>` : ''}</td>
+        <td><b>${money(o.totalCents)}</b>${o.creditAppliedCents ? `<div class="small muted">${money(o.creditAppliedCents)} paid with credit</div>` : ''}
+          ${o.refundedCents ? `<div class="small" style="color:var(--danger)">−${money(o.refundedCents)} refunded</div>` : ''}
+          ${o.creditedCents ? `<div class="small" style="color:var(--accent-ink)">−${money(o.creditedCents)} as credit</div>` : ''}</td>
         <td>${pill(o.status)}</td><td class="small">${esc(o.card)}</td>
         <td style="white-space:nowrap">
           <a class="btn btn-ghost btn-sm" href="/api/admin/orders/${o.id}/receipt.pdf" title="Download receipt">🧾</a>
           ${o.status === 'reserved' ? `<button class="btn btn-danger btn-sm" data-cancel="${o.id}">Cancel</button>` : ''}
-          ${o.status === 'picked_up' && o.refundedCents < o.totalCents ? `<button class="btn btn-ghost btn-sm" data-refund="${o.id}" data-max="${o.totalCents - o.refundedCents}">Refund</button>` : ''}
+          ${o.status === 'picked_up' && o.refundableCents > 0 ? `<button class="btn btn-ghost btn-sm" data-refund="${o.id}">Refund</button>` : ''}
         </td></tr>`).join('')}</tbody></table></div>` : '<div class="empty"><h3>No orders in this period</h3></div>';
     panel.onclick = async (e) => {
       const c = e.target.closest('[data-cancel]');
@@ -267,22 +288,64 @@ async function orders(panel) {
 }
 
 function refundForm(o, done) {
-  const max = o.totalCents - o.refundedCents;
+  const max = o.refundableCents;
+  const cardPart = o.totalCents - o.creditAppliedCents;
+  const paidWith = o.creditAppliedCents
+    ? (cardPart > 0 ? `${esc(o.card)} (${money(cardPart)}) + platform credit (${money(o.creditAppliedCents)})` : `Platform credit (${money(o.creditAppliedCents)})`)
+    : `${esc(o.card)} (${money(o.totalCents)})`;
   const modal = openModal(`Refund order #${o.id}`, `
-    <p class="muted small" style="margin-top:0">${o.quantity} × ${esc(o.itemTitle)} · ${esc(o.restaurant)} · charged ${money(o.totalCents)} to ${esc(o.card)}
-      ${o.refundedCents ? ` · already refunded ${money(o.refundedCents)}` : ''}</p>
-    <div class="field"><label for="rf-amt">Refund amount ($)</label><input id="rf-amt" inputmode="decimal" value="${(max / 100).toFixed(2)}">
-      <div class="hint">Up to ${money(max)}. The food share of the refund is deducted from the restaurant's payout.</div></div>
+    <p class="muted small" style="margin-top:0">${o.quantity} × ${esc(o.itemTitle)} · ${esc(o.restaurant)} · customer ${esc(o.customer)} · total ${money(o.totalCents)}
+      ${o.refundedCents + o.creditedCents ? ` · already refunded ${money(o.refundedCents + o.creditedCents)}` : ''}</p>
+    <div class="field"><label>Amount</label>
+      <div class="timer-chips" id="rf-pcts">${[10, 25, 50, 75, 100].map((p) => `<button type="button" data-pct="${p}" class="${p === 100 ? 'on' : ''}">${p}%</button>`).join('')}
+        <button type="button" data-pct="manual">Manual</button></div>
+      <div class="timer-custom"><span class="muted">$</span><input id="rf-amt" inputmode="decimal" value="${(max / 100).toFixed(2)}" style="width:140px">
+        <span class="muted small">of ${money(max)} refundable</span></div></div>
+    <div class="field"><label>Refund to</label>
+      <label class="pay-option"><input type="radio" name="rf-method" value="original" checked>
+        <span><b>Original form of payment</b><br><span class="small muted">${paidWith}${o.creditAppliedCents && cardPart > 0 ? '. Refunded to the card first, then back to credit.' : ''}</span></span></label>
+      <label class="pay-option"><input type="radio" name="rf-method" value="credit">
+        <span><b>BiteBack platform credit</b><br><span class="small muted">Added to ${esc(o.customer)}'s credit balance for future orders.</span></span></label>
+      <div class="alert alert-info small" id="rf-effect"></div></div>
     <div class="field"><label for="rf-reason">Reason</label><input id="rf-reason" maxlength="300" placeholder="e.g. Item was missing from the bag"></div>
     <div id="rf-msg"></div>
     <button class="btn btn-primary btn-block" id="rf-go">Issue refund</button>`);
-  $('#rf-go', modal.body).addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+  const b = modal.body;
+  let pct = 100;
+  const amountCents = () => (pct === 'manual' ? Math.round(Number($('#rf-amt', b).value.replace(/[$,]/g, '')) * 100) : Math.max(1, Math.round((max * pct) / 100)));
+  const method = () => b.querySelector('input[name=rf-method]:checked').value;
+  const sync = () => {
+    if (pct !== 'manual') $('#rf-amt', b).value = (amountCents() / 100).toFixed(2);
+    const amt = amountCents();
+    $('#rf-effect', b).innerHTML = method() === 'credit'
+      ? `💳 <b>${money(amt)}</b> platform credit, <b>paid by you (BiteBack)</b>. The restaurant still receives its full payment for this order.`
+      : `↩️ <b>${money(amt)}</b> back to the customer's original payment. <b>Neither the restaurant nor BiteBack keeps</b> the refunded share. It's deducted from the restaurant's payout and your service fee.`;
+    $('#rf-go', b).textContent = `Refund ${money(amt)} ${method() === 'credit' ? 'as platform credit' : 'to original payment'}`;
+  };
+  $('#rf-pcts', b).addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-pct]');
+    if (!btn) return;
+    pct = btn.dataset.pct === 'manual' ? 'manual' : Number(btn.dataset.pct);
+    $$('#rf-pcts button', b).forEach((x) => x.classList.toggle('on', x === btn));
+    if (pct === 'manual') $('#rf-amt', b).focus();
+    sync();
+  });
+  $('#rf-amt', b).addEventListener('input', () => {
+    pct = 'manual';
+    $$('#rf-pcts button', b).forEach((x) => x.classList.toggle('on', x.dataset.pct === 'manual'));
+    sync();
+  });
+  b.addEventListener('change', sync);
+  sync();
+  $('#rf-go', b).addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
     try {
-      await api(`/admin/orders/${o.id}/refund`, { method: 'POST', body: { amount: $('#rf-amt', modal.body).value, reason: $('#rf-reason', modal.body).value } });
+      const body = { method: method(), reason: $('#rf-reason', b).value };
+      if (pct === 'manual') body.amount = $('#rf-amt', b).value; else body.percent = pct;
+      await api(`/admin/orders/${o.id}/refund`, { method: 'POST', body });
       modal.close();
-      toast('Refund issued');
+      toast(method() === 'credit' ? 'Platform credit issued' : 'Refund issued to original payment');
       done();
-    } catch (err) { showError($('#rf-msg', modal.body), err); }
+    } catch (err) { showError($('#rf-msg', b), err); }
   }));
 }
 
@@ -319,30 +382,54 @@ async function payouts(panel) {
     <div class="row" style="margin-bottom:14px"><h3 style="margin:0">Balances · ${money(owed)} owed</h3><span class="spacer"></span>
       <a class="btn btn-ghost btn-sm" href="/api/admin/payouts.csv">⬇ Export CSV</a></div>
     ${balances.length ? `<div class="card table-wrap" style="padding:8px"><table class="data">
-      <thead><tr><th>Restaurant</th><th>Completed orders</th><th>Earned</th><th>Paid</th><th>Balance owed</th><th>Last paid</th><th></th></tr></thead>
+      <thead><tr><th>Restaurant</th><th>Bank account</th><th>Completed orders</th><th>Earned</th><th>Paid</th><th>Balance owed</th><th>Last paid</th><th></th></tr></thead>
       <tbody>${balances.map((b) => `<tr><td><b>${esc(b.name)}</b><div class="muted small">${esc(b.city)} · ${esc(b.email)}</div></td>
+        <td class="small">${b.bankDetails ? esc(b.bankDetails.split(' · ').slice(0, 2).join(' · ')) : '<span style="color:var(--accent-ink)">Not on file</span>'}</td>
         <td>${b.orders}</td><td>${money(b.earnedCents)}</td><td>${money(b.paidCents)}</td><td><b>${money(b.balanceCents)}</b></td><td class="small">${esc(day(b.lastPaidAt))}</td>
         <td>${b.balanceCents > 0 ? `<button class="btn btn-primary btn-sm" data-pay="${b.restaurantId}">Record payout</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`
       : '<div class="empty"><h3>No earnings yet</h3></div>'}
     <h3 style="margin-top:26px">Payout history</h3>
-    ${history.length ? `<div class="card table-wrap" style="padding:8px"><table class="data"><thead><tr><th>Date</th><th>Restaurant</th><th>Amount</th><th>Reference</th><th>Note</th><th>By</th></tr></thead>
-      <tbody>${history.map((p) => `<tr><td class="small">${esc(fmtDateTime(p.paid_at))}</td><td>${esc(p.restaurant_name)}</td><td><b>${money(p.amount_cents)}</b></td>
-        <td class="small">${esc(p.reference)}</td><td class="small">${esc(p.note)}</td><td class="small">${esc(p.created_by_name || '')}</td></tr>`).join('')}</tbody></table></div>`
+    ${history.length ? `<div class="card table-wrap" style="padding:8px"><table class="data"><thead><tr><th>Date</th><th>Invoice number</th><th>Restaurant</th><th>Amount</th><th>Bank / transaction details</th><th>Note</th><th>By</th></tr></thead>
+      <tbody>${history.map((p) => `<tr><td class="small">${esc(fmtDateTime(p.paid_at))}</td><td><code>${esc(p.reference)}</code></td><td>${esc(p.restaurant_name)}</td><td><b>${money(p.amount_cents)}</b></td>
+        <td class="small">${esc(p.bank_details || 'n/a')}${p.transaction_id ? `<div><code>${esc(p.transaction_id)}</code></div>` : ''}</td>
+        <td class="small">${esc(p.note)}</td><td class="small">${esc(p.created_by_name || '')}</td></tr>`).join('')}</tbody></table></div>`
       : '<p class="muted">No payouts recorded yet.</p>'}`;
   panel.onclick = (e) => {
     const b = e.target.closest('[data-pay]');
     if (!b) return;
     const r = balances.find((x) => x.restaurantId === Number(b.dataset.pay));
+    if (!r.bankDetails) {
+      openModal(`Record payout · ${r.name}`, `<div class="alert alert-warn">🏦 <b>No payout bank account on file.</b> Ask ${esc(r.name)} to add their bank account in their
+        restaurant portal (<b>Payouts</b> tab). You can record this payout once it's on file.</div>`);
+      return;
+    }
     const modal = openModal(`Record payout · ${r.name}`, `
+      <div class="field"><label for="p-inv">Invoice number 🔒</label><input id="p-inv" readonly aria-readonly="true" class="locked" value="Assigning…" tabindex="-1"></div>
+      <div class="field"><label for="p-bank">Bank / transaction details 🔒</label>
+        <textarea id="p-bank" readonly aria-readonly="true" class="locked" rows="3" tabindex="-1">Loading…</textarea>
+        <div class="hint">Filled in automatically from the restaurant's bank account on file and can't be changed. Put the invoice number in the memo of your transfer.
+          <a href="#" id="p-reveal">Show full account numbers</a> (recorded in the audit log).</div>
+        <div id="p-full"></div></div>
       <div class="field"><label for="p-amt">Amount paid ($)</label><input id="p-amt" inputmode="decimal" value="${(r.balanceCents / 100).toFixed(2)}"></div>
-      <div class="field"><label for="p-ref">Reference</label><input id="p-ref" maxlength="120" placeholder="e.g. ACH trace #, check #, transfer ID"></div>
-      <div class="field"><label for="p-note">Note (optional)</label><input id="p-note" maxlength="300"></div>
+      <div class="field"><label for="p-note">Internal note (optional)</label><input id="p-note" maxlength="300"></div>
       <div id="p-msg"></div><button class="btn btn-primary btn-block" id="p-go">Record payout</button>`);
+    api(`/admin/payouts/next-invoice?restaurantId=${r.restaurantId}`).then((d) => {
+      $('#p-inv', modal.body).value = d.invoiceNumber;
+      $('#p-bank', modal.body).value = `${d.bankDetails}\nTransaction ID: ${d.transactionId}`;
+    }).catch((err) => showError($('#p-msg', modal.body), err));
+    $('#p-reveal', modal.body).addEventListener('click', async (ev) => {
+      ev.preventDefault();
+      try {
+        const { bank } = await api(`/admin/restaurants/${r.restaurantId}/bank`);
+        $('#p-full', modal.body).innerHTML = `<div class="alert alert-warn small" style="margin-top:8px">${esc(bank.bankName)} · ${esc(bank.accountType)} · ${esc(bank.holderName)}<br>
+          Routing <code>${esc(bank.routingNumber)}</code> · Account <code>${esc(bank.accountNumber)}</code></div>`;
+      } catch (err) { showError($('#p-msg', modal.body), err); }
+    });
     $('#p-go', modal.body).addEventListener('click', (ev) => withBusy(ev.currentTarget, async () => {
       try {
-        await api('/admin/payouts', { method: 'POST', body: { restaurantId: r.restaurantId, amount: $('#p-amt', modal.body).value,
-          reference: $('#p-ref', modal.body).value, note: $('#p-note', modal.body).value } });
-        modal.close(); toast('Payout recorded'); payouts(panel);
+        const { invoiceNumber } = await api('/admin/payouts', { method: 'POST', body: { restaurantId: r.restaurantId, amount: $('#p-amt', modal.body).value,
+          note: $('#p-note', modal.body).value } });
+        modal.close(); toast(`Payout ${invoiceNumber} recorded`); payouts(panel);
       } catch (err) { showError($('#p-msg', modal.body), err); }
     }));
   };

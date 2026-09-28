@@ -83,6 +83,7 @@ export async function renderHeader(active) {
       '<button class="linklike" id="logout-btn">Log out</button>';
   } else {
     links = link('/offers', 'Browse deals', 'offers') + link('/orders', 'My orders', 'orders') + link('/account', 'Account', 'account') +
+      (user.creditCents > 0 ? `<a href="/account#credit" class="credit-chip" title="Your BiteBack platform credit">🎁 ${money(user.creditCents)} credit</a>` : '') +
       '<button class="linklike" id="logout-btn">Log out</button>';
   }
   el.className = 'site-header';

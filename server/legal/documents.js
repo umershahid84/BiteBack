@@ -5,7 +5,7 @@
 // Company details are filled in from config (LEGAL_ENTITY_NAME, SUPPORT_EMAIL,
 // LEGAL_ADDRESS). Have a Washington-licensed attorney review these documents before launch.
 
-const VERSION = '2026-09-28';
+const VERSION = '2026-09-28.2';
 const EFFECTIVE = 'September 28, 2026';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -78,11 +78,34 @@ someone using a PIN you shared.</p>
 <h2>6. Problems with an order and refunds</h2>
 <p>6.1 If your food was not provided, was materially different from its description, or appeared unsafe, contact us at
 <a href="mailto:${c.email}">${c.email}</a> within 24 hours of pickup with your receipt number and a description (and photos if possible).
-We will review your request with the Restaurant and, where appropriate, issue a full or partial refund to your original payment method.</p>
+We will review your request with the Restaurant and, where appropriate, issue a full or partial refund. BiteBack decides the refund
+method, and will tell you which one it used:</p>
+<ul>
+  <li><b>Original form of payment.</b> The refund goes back to how you paid: to the card you used, and if you paid with Platform Credit,
+  that portion is returned to your credit balance. Card refunds usually appear within 5 to 10 business days, depending on your card
+  issuer.</li>
+  <li><b>BiteBack Platform Credit.</b> The refund is added to your Platform Credit balance for future orders (see Section 6.4).</li>
+</ul>
+<p>Where applicable law requires a refund to your original form of payment, we will refund it that way.</p>
 <p>6.2 Because surplus food is sold at a discount in the condition described, we cannot offer refunds for matters of taste or
 preference, or for food that matched its description.</p>
 <p>6.3 Nothing in these Terms limits any right you have under the Washington Consumer Protection Act (RCW 19.86) or other laws that
 cannot be waived.</p>
+<p>6.4 <b>BiteBack Platform Credit.</b> Platform Credit is a promotional and refund balance issued by BiteBack, at its discretion,
+to your account.</p>
+<ul>
+  <li><b>Where you see it:</b> your balance appears in the site header, on your Account page (with a history of every credit and use),
+  and at checkout.</li>
+  <li><b>Using it:</b> you choose whether to use it and how much, up to your balance and the order total. Any remainder is charged to
+  your card, and the card portion must be at least $0.50.</li>
+  <li><b>Unused orders:</b> credit applied to an order that is cancelled, declined or not picked up is returned to your balance.</li>
+  <li><b>Restrictions:</b> Platform Credit has no cash value, cannot be purchased, reloaded, sold or transferred, and cannot be redeemed
+  for cash except where required by law.</li>
+  <li><b>Expiry:</b> it does not expire while your account is open and in good standing. If we close your account for fraud or a serious
+  breach of these Terms, unused credit is forfeited to the extent permitted by law.</li>
+  <li><b>Errors:</b> we may correct credit issued in error.</li>
+  <li><b>Who pays:</b> Platform Credit is funded by BiteBack; when you use it, the Restaurant is paid in full for your order.</li>
+</ul>
 
 <h2>7. Acceptable use</h2>
 <p>You agree not to: (a) use the Service for anything unlawful, fraudulent or harmful; (b) resell food bought through BiteBack;
@@ -204,15 +227,29 @@ behalf as your limited payment collection agent. A customer's payment to BiteBac
 BiteBack currently charges Partners <b>no commission</b>. Customers pay a separate BiteBack service fee (currently ${c.serviceFeePct}% of
 the food subtotal), which BiteBack keeps. We will give you at least 30 days' written notice before introducing or changing any fee
 charged to Partners.</p>
-<p>5.3 <b>Payouts.</b> Proceeds for completed orders are paid out through our payment processor to the bank account you connect,
-on a weekly schedule, less any refunds, chargebacks or adjustments under Section 5.5. You must complete the processor's identity
-verification (know-your-customer) requirements to receive payouts.</p>
+<p>5.3 <b>Payouts.</b> Proceeds for completed orders are paid on a weekly schedule to the bank account you provide in the Partner Portal
+(Payouts tab), less any refunds, chargebacks or adjustments under Section 5.5.</p>
+<ul>
+  <li><b>Your bank details:</b> you must keep them accurate and complete any identity verification (know-your-customer) required by
+  BiteBack or its payment processor. BiteBack is not responsible for a payout sent to the account details you supplied.</li>
+  <li><b>Payout records:</b> each payout is documented with a system-generated invoice number, the receiving bank account (shown
+  masked) and a transaction ID. These records cannot be altered, and they appear in your Partner Portal so you can match each deposit.</li>
+  <li><b>Questions:</b> raise any question about a payout within 60 days.</li>
+</ul>
 <p>5.4 <b>Taxes.</b> Where BiteBack is a marketplace facilitator under Washington law, BiteBack will collect and remit retail sales tax
 on sales made through the marketplace. You remain responsible for all other taxes on your business, including business and
 occupation (B&amp;O) tax on your gross proceeds and any income taxes.</p>
-<p>5.5 <b>Refunds and chargebacks.</b> If a customer is refunded because food was not provided, was materially not as described, or was
-unsafe, or if a payment is reversed through a chargeback caused by your acts or omissions, the corresponding amount will be deducted
-from your future payouts. BiteBack will share the customer's complaint with you and consider your response before deciding.</p>
+<p>5.5 <b>Refunds, Platform Credit and chargebacks.</b> BiteBack will share a customer's complaint with you and consider your response
+before deciding on a refund. BiteBack may resolve a complaint in one of two ways:</p>
+<ul>
+  <li><b>(a) Refund to the customer's original form of payment.</b> The refunded share of the food subtotal is deducted from your
+  payouts, and you receive nothing for the refunded portion. BiteBack likewise gives up its service fee on that portion.</li>
+  <li><b>(b) BiteBack Platform Credit.</b> BiteBack may instead issue the customer Platform Credit. Platform Credit, including goodwill
+  credit, is funded solely by BiteBack. You keep your full proceeds for the order, and nothing is deducted from your payouts.</li>
+</ul>
+<p>When a customer pays for an order with Platform Credit, in whole or in part, you receive your full proceeds for that order exactly as
+if it had been paid by card. BiteBack bears the cost of the credit. If a payment is reversed through a chargeback caused by your acts or
+omissions, the corresponding amount is deducted from your future payouts.</p>
 
 <h2>6. Content and licence</h2>
 <p>You grant BiteBack a non-exclusive, royalty-free, worldwide licence, for the term of this Agreement, to use, reproduce, display and
@@ -276,6 +313,10 @@ when you use the BiteBack website and services as a customer or restaurant partn
   <li><b>Payment information:</b> card numbers are collected and processed by our payment processor (Stripe) and never stored on
   BiteBack servers. We store a processor reference and the card brand, last four digits and expiry date so you can recognise saved
   cards and receipts.</li>
+  <li><b>Payout bank account (restaurant partners):</b> account holder name, bank name, account type, routing number and account
+  number. Routing and account numbers are encrypted at rest. They are shown to the partner only as the last four digits, and are used
+  only to send payouts. Viewing full numbers is limited to authorised BiteBack staff, and each view is logged.</li>
+  <li><b>Platform Credit:</b> a ledger of credit issued to you, used on orders and returned, with dates and reasons.</li>
   <li><b>Location:</b> if you choose "Use my location," your browser shares your approximate location with us to show nearby deals.
   We use it for that search and do not store it on our servers. You can also search by city or ZIP code instead.</li>
   <li><b>Legal acceptances:</b> which versions of our terms you accepted, when, and the IP address and browser used, as a record
