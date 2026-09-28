@@ -1,6 +1,7 @@
 // Order lifecycle: pending_payment -> reserved -> picked_up
 //                                  \-> failed    \-> cancelled | expired
 const crypto = require('node:crypto');
+const { EventEmitter } = require('node:events');
 const { transaction } = require('./db');
 const { quote } = require('./pricing');
 const { HttpError, bad } = require('./errors');
@@ -9,6 +10,9 @@ const MAX_PER_ORDER = 10;
 
 function createOrderService({ db, config, payments }) {
   const nowIso = () => new Date().toISOString();
+  // Emits 'reserved' (order) when a customer's payment hold succeeds, so restaurants can be alerted live.
+  const events = new EventEmitter();
+  events.setMaxListeners(0);
 
   const getOffer = db.prepare(`
     SELECT o.*, r.name AS restaurant_name, r.tax_rate_bps
@@ -71,6 +75,10 @@ function createOrderService({ db, config, payments }) {
     });
   }
 
+  function markReserved(orderId) {
+    if (setStatus.run('reserved', null, orderId, 'pending_payment').changes) events.emit('reserved', getOrder.get(orderId));
+  }
+
   // Step 2: place a hold on the card for the order total.
   async function authorize(order, { customerId, paymentRef, attached }) {
     let result;
@@ -88,7 +96,7 @@ function createOrderService({ db, config, payments }) {
       throw err;
     }
     db.prepare('UPDATE orders SET payment_ref = ? WHERE id = ?').run(result.ref, order.id);
-    if (result.status === 'authorized') setStatus.run('reserved', null, order.id, 'pending_payment');
+    if (result.status === 'authorized') markReserved(order.id);
     return result;
   }
 
@@ -96,7 +104,7 @@ function createOrderService({ db, config, payments }) {
   async function confirmAuthorization(order) {
     if (order.status !== 'pending_payment' || !order.payment_ref) return getOrder.get(order.id);
     const status = await payments.authorizationStatus(order.payment_ref);
-    if (status === 'authorized') setStatus.run('reserved', null, order.id, 'pending_payment');
+    if (status === 'authorized') markReserved(order.id);
     else if (status === 'failed') await release(order.id, 'pending_payment', 'failed', { restock: true });
     return getOrder.get(order.id);
   }
@@ -146,7 +154,7 @@ function createOrderService({ db, config, payments }) {
     return { stalePending: stalePending.length, missed: missed.length };
   }
 
-  return { quoteOffer, reserve, authorize, confirmAuthorization, release, completePickup, sweep, getOrder: (id) => getOrder.get(id) };
+  return { events, quoteOffer, reserve, authorize, confirmAuthorization, release, completePickup, sweep, getOrder: (id) => getOrder.get(id) };
 }
 
 module.exports = { createOrderService, MAX_PER_ORDER };

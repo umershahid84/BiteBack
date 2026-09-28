@@ -3,7 +3,7 @@ const v = require('../validate');
 const { HttpError, bad } = require('../errors');
 const { requireRole, createLimiter } = require('../auth');
 
-module.exports = function restaurantRoutes({ db, orders }) {
+module.exports = function restaurantRoutes({ db, orders, images }) {
   const router = express.Router();
   router.use(requireRole('restaurant'));
 
@@ -41,9 +41,58 @@ module.exports = function restaurantRoutes({ db, orders }) {
     res.json({ restaurant: db.prepare('SELECT * FROM restaurants WHERE id = ?').get(req.restaurant.id) });
   });
 
+  // ---- Menu ----
+
+  const listMenu = db.prepare('SELECT * FROM menu_items WHERE restaurant_id = ? AND active = 1 ORDER BY name COLLATE NOCASE');
+
+  function parseMenuItem(b) {
+    return {
+      name: v.str(b.name, 'Item name', { min: 2, max: 80 }),
+      description: v.str(b.description, 'Description', { max: 500, optional: true }),
+      priceCents: v.dollarsToCents(b.price, 'Menu price', { min: 0.5, max: 1000 }),
+      dietary: v.dietary(b.dietary),
+    };
+  }
+
+  function ownMenuItem(req, id = req.params.id) {
+    const item = db.prepare('SELECT * FROM menu_items WHERE id = ? AND restaurant_id = ? AND active = 1').get(Number(id), req.restaurant.id);
+    if (!item) throw new HttpError(404, 'Menu item not found.');
+    return item;
+  }
+
+  router.get('/menu', (req, res) => res.json({ items: listMenu.all(req.restaurant.id) }));
+
+  router.post('/menu', (req, res) => {
+    const m = parseMenuItem(req.body || {});
+    const image = req.body?.image ? images.saveDataUrl(req.body.image) : null;
+    const { lastInsertRowid } = db.prepare(`INSERT INTO menu_items (restaurant_id, name, description, price_cents, dietary, image_path)
+                                            VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(req.restaurant.id, m.name, m.description, m.priceCents, m.dietary, image);
+    res.status(201).json({ item: db.prepare('SELECT * FROM menu_items WHERE id = ?').get(lastInsertRowid) });
+  });
+
+  router.put('/menu/:id', (req, res) => {
+    const item = ownMenuItem(req);
+    const m = parseMenuItem(req.body || {});
+    // Old photos are kept on disk because existing offers and orders may still show them.
+    const image = req.body?.image ? images.saveDataUrl(req.body.image) : req.body?.removeImage ? null : item.image_path;
+    db.prepare('UPDATE menu_items SET name = ?, description = ?, price_cents = ?, dietary = ?, image_path = ? WHERE id = ?')
+      .run(m.name, m.description, m.priceCents, m.dietary, image, item.id);
+    res.json({ item: db.prepare('SELECT * FROM menu_items WHERE id = ?').get(item.id) });
+  });
+
+  router.delete('/menu/:id', (req, res) => {
+    const item = ownMenuItem(req);
+    db.prepare('UPDATE menu_items SET active = 0 WHERE id = ?').run(item.id);
+    res.json({ items: listMenu.all(req.restaurant.id) });
+  });
+
   // ---- Offers ----
 
-  function parseOffer(b, existing) {
+  // An offer is a discounted menu item: name, menu price, dietary tags and photo come from the menu.
+  function parseOffer(req, existing) {
+    const b = req.body || {};
+    const item = ownMenuItem(req, b.menuItemId);
     const pickupStart = v.isoDate(b.pickupStart, 'Pickup start');
     const pickupEnd = v.isoDate(b.pickupEnd, 'Pickup end');
     if (pickupEnd <= pickupStart) throw bad('Pickup end must be after pickup start.');
@@ -52,11 +101,13 @@ module.exports = function restaurantRoutes({ db, orders }) {
     const reason = String(b.reason || '');
     if (!v.OFFER_REASONS[reason]) throw bad('Please choose why this food is available.');
     return {
-      title: v.str(b.title, 'Item name', { min: 2, max: 80 }),
-      description: v.str(b.description, 'Description', { max: 500, optional: true }),
+      menuItemId: item.id,
+      imagePath: item.image_path,
+      title: item.name,
+      description: v.str(b.description, 'Description', { max: 500, optional: true }) || item.description,
       reason,
-      dietary: v.dietary(b.dietary),
-      originalPriceCents: v.dollarsToCents(b.originalPrice, 'Original price', { min: 0.5, max: 1000 }),
+      dietary: item.dietary,
+      originalPriceCents: item.price_cents,
       discountPct: v.int(Number(b.discountPct), 'Discount', { min: 1, max: 90 }),
       quantityTotal: v.int(Number(b.quantity), 'Quantity', { min: 1, max: 500 }),
       pickupStart: pickupStart.toISOString(),
@@ -82,12 +133,12 @@ module.exports = function restaurantRoutes({ db, orders }) {
   });
 
   router.post('/offers', (req, res) => {
-    const o = parseOffer(req.body || {});
+    const o = parseOffer(req);
     const { lastInsertRowid } = db.prepare(`
-      INSERT INTO offers (restaurant_id, title, description, reason, dietary, original_price_cents, discount_pct,
+      INSERT INTO offers (restaurant_id, menu_item_id, image_path, title, description, reason, dietary, original_price_cents, discount_pct,
                           quantity_total, quantity_available, pickup_start, pickup_end)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(req.restaurant.id, o.title, o.description, o.reason, o.dietary, o.originalPriceCents, o.discountPct,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(req.restaurant.id, o.menuItemId, o.imagePath, o.title, o.description, o.reason, o.dietary, o.originalPriceCents, o.discountPct,
         o.quantityTotal, o.quantityTotal, o.pickupStart, o.pickupEnd);
     res.status(201).json({ offer: db.prepare('SELECT * FROM offers WHERE id = ?').get(lastInsertRowid) });
   });
@@ -95,13 +146,13 @@ module.exports = function restaurantRoutes({ db, orders }) {
   router.put('/offers/:id', (req, res) => {
     const existing = ownOffer(req);
     if (existing.status === 'ended') throw new HttpError(409, 'Ended offers cannot be edited.');
-    const o = parseOffer(req.body || {}, existing);
+    const o = parseOffer(req, existing);
     // Price changes only affect new orders; existing orders keep the price they were quoted.
     const committed = existing.quantity_total - existing.quantity_available;
     if (o.quantityTotal < committed) throw bad(`${committed} already ordered, so quantity cannot be lower than that.`);
-    db.prepare(`UPDATE offers SET title = ?, description = ?, reason = ?, dietary = ?, original_price_cents = ?, discount_pct = ?,
+    db.prepare(`UPDATE offers SET menu_item_id = ?, image_path = ?, title = ?, description = ?, reason = ?, dietary = ?, original_price_cents = ?, discount_pct = ?,
                 quantity_total = ?, quantity_available = ?, pickup_start = ?, pickup_end = ? WHERE id = ?`)
-      .run(o.title, o.description, o.reason, o.dietary, o.originalPriceCents, o.discountPct, o.quantityTotal,
+      .run(o.menuItemId, o.imagePath, o.title, o.description, o.reason, o.dietary, o.originalPriceCents, o.discountPct, o.quantityTotal,
         o.quantityTotal - committed, o.pickupStart, o.pickupEnd, existing.id);
     db.prepare(`UPDATE orders SET pickup_end = ? WHERE offer_id = ? AND status IN ('pending_payment', 'reserved')`).run(o.pickupEnd, existing.id);
     res.json({ offer: db.prepare('SELECT * FROM offers WHERE id = ?').get(existing.id) });
@@ -123,6 +174,7 @@ module.exports = function restaurantRoutes({ db, orders }) {
     const customer = db.prepare('SELECT username FROM users WHERE id = ?').get(o.user_id);
     return {
       id: o.id,
+      imageUrl: db.prepare('SELECT image_path FROM offers WHERE id = ?').get(o.offer_id)?.image_path || null,
       status: o.status,
       itemTitle: o.item_title,
       quantity: o.quantity,
@@ -170,6 +222,27 @@ module.exports = function restaurantRoutes({ db, orders }) {
     if (req.body?.orderId && Number(req.body.orderId) !== order.id) throw new HttpError(409, 'PIN does not match this order.');
     const done = await orders.completePickup(order);
     res.json({ order: presentOrder(done) });
+  });
+
+  // Live stream of new orders (Server-Sent Events) so the portal can ring a bell.
+  router.get('/events', (req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-store',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.write('retry: 5000\n\n');
+    const restaurantId = req.restaurant.id;
+    const onReserved = (order) => {
+      if (order.restaurant_id === restaurantId) res.write(`event: order\ndata: ${JSON.stringify(presentOrder(order))}\n\n`);
+    };
+    orders.events.on('reserved', onReserved);
+    const ping = setInterval(() => res.write(': ping\n\n'), 25000);
+    req.on('close', () => {
+      clearInterval(ping);
+      orders.events.off('reserved', onReserved);
+    });
   });
 
   router.get('/stats', (req, res) => {

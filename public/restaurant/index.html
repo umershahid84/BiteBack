@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Restaurant portal · BiteBack</title>
 <meta name="description" content="BiteBack: rescue good restaurant food at a discount around greater Seattle.">
-<meta name="theme-color" content="#059669">
+<meta name="theme-color" content="#7C3AED">
 <link rel="icon" href="/assets/logo-mark.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
 <link rel="stylesheet" href="/css/styles.css">
@@ -14,20 +14,24 @@
 <header id="site-header" class="site-header"></header>
 <main class="page">
   <div class="container">
-    <div class="page-head">
+    <div class="page-head banner">
       <div><h1 id="r-title">Restaurant portal</h1><p class="muted" style="margin:4px 0 0" id="r-sub"></p></div>
       <span class="spacer"></span>
+      <button class="btn btn-ghost sound-toggle" id="sound-btn" type="button">🔔 Order sound: on</button>
       <button class="btn btn-primary" id="new-offer-btn">+ Post surplus food</button>
     </div>
+    <div id="sound-banner" class="alert-banner hidden">🔔 <span>Click anywhere on this page to turn on the new-order bell. Browsers block sound until you interact with the page.</span></div>
     <div class="kpis" id="kpis"></div>
     <div class="tabs" role="tablist">
       <button data-tab="pickup" class="on">Verify pickup</button>
       <button data-tab="offers">My offers</button>
+      <button data-tab="menu">Menu</button>
       <button data-tab="orders">Orders</button>
       <button data-tab="profile">Profile &amp; tax</button>
     </div>
     <section data-panel="pickup"></section>
     <section data-panel="offers" class="hidden"></section>
+    <section data-panel="menu" class="hidden"></section>
     <section data-panel="orders" class="hidden"></section>
     <section data-panel="profile" class="hidden"></section>
   </div>

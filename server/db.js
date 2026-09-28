@@ -49,9 +49,23 @@ CREATE TABLE IF NOT EXISTS payment_methods (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+CREATE TABLE IF NOT EXISTS menu_items (
+  id INTEGER PRIMARY KEY,
+  restaurant_id INTEGER NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  price_cents INTEGER NOT NULL CHECK (price_cents > 0),
+  dietary TEXT NOT NULL DEFAULT '',
+  image_path TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 CREATE TABLE IF NOT EXISTS offers (
   id INTEGER PRIMARY KEY,
   restaurant_id INTEGER NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+  menu_item_id INTEGER REFERENCES menu_items(id),
+  image_path TEXT,
   title TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   reason TEXT NOT NULL,
@@ -95,6 +109,7 @@ CREATE INDEX IF NOT EXISTS idx_offers_status ON offers(status, pickup_end);
 CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_restaurant ON orders(restaurant_id, status);
 CREATE INDEX IF NOT EXISTS idx_pm_user ON payment_methods(user_id);
+CREATE INDEX IF NOT EXISTS idx_menu_restaurant ON menu_items(restaurant_id, active);
 `;
 
 function openDatabase(file) {
@@ -102,7 +117,15 @@ function openDatabase(file) {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  migrate(db);
   return db;
+}
+
+// Adds columns introduced after a database was first created.
+function migrate(db) {
+  const has = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col);
+  if (!has('offers', 'menu_item_id')) db.exec('ALTER TABLE offers ADD COLUMN menu_item_id INTEGER REFERENCES menu_items(id)');
+  if (!has('offers', 'image_path')) db.exec('ALTER TABLE offers ADD COLUMN image_path TEXT');
 }
 
 // Runs fn inside a transaction; rolls back if it throws.

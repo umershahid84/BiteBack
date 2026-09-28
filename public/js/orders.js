@@ -31,6 +31,8 @@ function render(orders) {
     return `
     <div class="card">
       <div class="order-item">
+        <div class="row" style="align-items:flex-start;flex-wrap:nowrap;gap:16px">
+        ${o.imageUrl ? `<img class="thumb" src="${esc(o.imageUrl)}" alt="">` : ''}
         <div>
           <span class="status ${o.status}">${LABELS[o.status] || esc(o.status)}</span>
           <h3 style="margin:8px 0 2px">${o.quantity} × ${esc(o.itemTitle)}</h3>
@@ -45,6 +47,7 @@ function render(orders) {
             </table>
           </details>
           <div class="small muted" style="margin-top:6px">${charged}</div>
+        </div>
         </div>
         ${o.status === 'reserved' ? `
         <div class="pin-box" style="min-width:200px">

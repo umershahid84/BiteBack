@@ -3,13 +3,14 @@ const express = require('express');
 const { createSessionStore } = require('./auth');
 const { createOrderService } = require('./orders');
 const { HttpError } = require('./errors');
+const { createImageStore } = require('./images');
 
 const CSP = [
   "default-src 'self'",
   "script-src 'self' https://js.stripe.com",
   "frame-src https://js.stripe.com https://hooks.stripe.com",
   "connect-src 'self' https://api.stripe.com",
-  "img-src 'self' data: https://*.stripe.com",
+  "img-src 'self' data: blob: https://*.stripe.com",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self'",
   "base-uri 'self'",
@@ -21,7 +22,8 @@ function createApp({ db, config, payments }) {
   const app = express();
   const sessions = createSessionStore(db, config);
   const orders = createOrderService({ db, config, payments });
-  const deps = { db, config, payments, sessions, orders };
+  const images = createImageStore(config.uploadsDir || path.join(__dirname, '..', 'data', 'uploads'));
+  const deps = { db, config, payments, sessions, orders, images };
 
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');
@@ -34,6 +36,8 @@ function createApp({ db, config, payments }) {
     next();
   });
 
+  // Menu items carry a photo (base64), so they get a larger body limit.
+  app.use('/api/restaurant/menu', express.json({ limit: '5mb' }));
   app.use('/api', express.json({ limit: '50kb' }));
   // CSRF protection: state-changing API calls must carry a custom header, which browsers
   // only allow from same-origin scripts.
@@ -56,6 +60,7 @@ function createApp({ db, config, payments }) {
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Not found.')));
 
   app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
+  app.use('/uploads', express.static(images.dir, { fallthrough: false, maxAge: '30d', immutable: true }));
 
   app.use((err, _req, res, _next) => {
     const status = err.status || err.statusCode || 500;

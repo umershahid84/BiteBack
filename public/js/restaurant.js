@@ -1,5 +1,6 @@
-import { api, $, $$, esc, money, pct, fmtWindow, fmtDateTime, renderHeader, requireRole, showError, openModal, withBusy, toast } from './common.js';
+import { api, $, $$, esc, money, pct, fmtWindow, fmtDateTime, fmtTime, renderHeader, requireRole, showError, openModal, withBusy, toast } from './common.js';
 import { getConfig } from './cards.js';
+import { ringBell, unlockOnInteraction, isUnlocked } from './bell.js';
 
 await requireRole('restaurant');
 renderHeader('dash');
@@ -13,8 +14,10 @@ function setTitle() {
 setTitle();
 
 // ---------- Tabs ----------
-const panels = { pickup: renderPickup, offers: renderOffers, orders: renderOrders, profile: renderProfile };
+const panels = { pickup: renderPickup, offers: renderOffers, menu: renderMenu, orders: renderOrders, profile: renderProfile };
+let currentTab = 'pickup';
 function showTab(name) {
+  currentTab = name;
   $$('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
   $$('[data-panel]').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== name));
   panels[name]($(`[data-panel="${name}"]`));
@@ -76,7 +79,8 @@ function renderPickup(panel) {
       result.innerHTML = `
         <div class="card" style="box-shadow:none;background:var(--surface-2)">
           <div class="row"><span class="status reserved">Awaiting pickup</span><span class="spacer"></span><span class="muted small">Order #${o.id}</span></div>
-          <h3 style="margin:10px 0 4px">${o.quantity} × ${esc(o.itemTitle)}</h3>
+          <div class="row" style="flex-wrap:nowrap;margin-top:10px">${o.imageUrl ? `<img class="thumb" src="${esc(o.imageUrl)}" alt="">` : ''}
+          <h3 style="margin:0">${o.quantity} × ${esc(o.itemTitle)}</h3></div>
           <p class="muted small" style="margin:0 0 10px">Customer: <b>${esc(o.customerUsername)}</b> · Ordered ${fmtDateTime(o.createdAt)}</p>
           <table class="breakdown small">
             <tr><td>Food (${o.quantity} × ${money(o.unitPriceCents)})</td><td>${money(o.subtotalCents)}</td></tr>
@@ -128,7 +132,7 @@ async function renderOffers(panel) {
     <tbody>${offers.map((o) => {
       const price = Math.floor((o.original_price_cents * (100 - o.discount_pct)) / 100 + 0.5);
       return `<tr>
-        <td><b>${esc(o.title)}</b><div class="small muted">${esc(config.reasons[o.reason])}${o.awaiting_pickup ? ` · ${o.awaiting_pickup} awaiting pickup` : ''}${o.picked_up ? ` · ${o.picked_up} picked up` : ''}</div></td>
+        <td><div class="row" style="flex-wrap:nowrap;gap:12px">${o.image_path ? `<img class="thumb sm" src="${esc(o.image_path)}" alt="">` : ''}<div><b>${esc(o.title)}</b><div class="small muted">${esc(config.reasons[o.reason])}${o.awaiting_pickup ? ` · ${o.awaiting_pickup} awaiting pickup` : ''}${o.picked_up ? ` · ${o.picked_up} picked up` : ''}</div></div></div></td>
         <td>${money(price)} <span class="was small">${money(o.original_price_cents)}</span><div class="small muted">${o.discount_pct}% off</div></td>
         <td>${o.quantity_available} / ${o.quantity_total}</td>
         <td class="small">${fmtWindow(o.pickup_start, o.pickup_end)}</td>
@@ -156,50 +160,72 @@ async function renderOffers(panel) {
   };
 }
 
-function offerForm(existing) {
+let menuCache = null;
+async function loadMenu() {
+  menuCache = (await api('/restaurant/menu')).items;
+  return menuCache;
+}
+
+async function offerForm(existing, preselectId) {
+  const menu = await loadMenu();
+  if (!menu.length) {
+    const modal = openModal('Post surplus food', `
+      <div class="empty" style="padding:16px 0"><div style="font-size:48px">📋</div><h3>Add your menu first</h3>
+      <p>Offers are picked from your menu, so customers see the real dish name, price and photo.</p>
+      <button class="btn btn-primary" id="go-menu">Add menu items</button></div>`);
+    $('#go-menu', modal.body).addEventListener('click', () => { modal.close(); showTab('menu'); menuItemForm(); });
+    return;
+  }
   const now = new Date();
   const start = existing ? new Date(existing.pickup_start) : now;
   const end = existing ? new Date(existing.pickup_end) : new Date(now.getTime() + 3 * 3600000);
-  const tags = existing?.dietary ? existing.dietary.split(',') : [];
+  const selectedId = existing?.menu_item_id ?? preselectId ?? menu[0].id;
   const modal = openModal(existing ? 'Edit offer' : 'Post surplus food', `
     <form id="offer-form" novalidate>
-      <div class="field"><label for="o-title">Item name</label><input id="o-title" maxlength="80" value="${esc(existing?.title)}" placeholder="e.g. Chicken Pad Thai"></div>
-      <div class="field"><label for="o-desc">Description</label><textarea id="o-desc" maxlength="500" placeholder="What's included, allergens, how it's packed…">${esc(existing?.description)}</textarea></div>
+      <div class="field"><label for="o-item">Menu item</label>
+        <select id="o-item">${menu.map((m) => `<option value="${m.id}" ${m.id === selectedId ? 'selected' : ''}>${esc(m.name)} (${money(m.price_cents)})</option>`).join('')}</select>
+        <div class="hint">Not listed? <a href="#" id="o-add-item">Add it to your menu</a>.</div></div>
+      <div class="item-preview" id="o-item-preview"></div>
       <div class="field"><label for="o-reason">Why is it available?</label><select id="o-reason">
         ${Object.entries(config.reasons).map(([k, v]) => `<option value="${k}" ${existing?.reason === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></div>
-      <div class="grid-3">
-        <div class="field"><label for="o-price">Original price ($)</label><input id="o-price" inputmode="decimal" value="${existing ? (existing.original_price_cents / 100).toFixed(2) : ''}" placeholder="15.00"></div>
+      <div class="field"><label for="o-desc">Note for customers <span class="muted">(optional)</span></label>
+        <textarea id="o-desc" maxlength="500" placeholder="e.g. Customer ordered chicken instead. Broth packed separately.">${esc(existing && existing.description !== menu.find((m) => m.id === selectedId)?.description ? existing.description : '')}</textarea></div>
+      <div class="grid-2">
         <div class="field"><label for="o-disc">Discount (%)</label><input id="o-disc" type="number" min="1" max="90" value="${existing?.discount_pct ?? 50}"></div>
-        <div class="field"><label for="o-qty">Quantity</label><input id="o-qty" type="number" min="1" max="500" value="${existing?.quantity_total ?? 1}"></div>
+        <div class="field"><label for="o-qty">Quantity available</label><input id="o-qty" type="number" min="1" max="500" value="${existing?.quantity_total ?? 1}"></div>
       </div>
       <div class="alert alert-info small" id="o-preview"></div>
       <div class="grid-2">
         <div class="field"><label for="o-start">Pickup from</label><input id="o-start" type="datetime-local" value="${toLocalInput(start)}"></div>
         <div class="field"><label for="o-end">Pickup until</label><input id="o-end" type="datetime-local" value="${toLocalInput(end)}"></div>
       </div>
-      <div class="field"><label>Dietary tags</label><div class="chips">
-        ${config.dietaryTags.map((t) => `<label class="check chip" style="padding:6px 10px"><input type="checkbox" value="${t}" ${tags.includes(t) ? 'checked' : ''}> ${t}</label>`).join('')}</div></div>
       <div id="o-msg"></div>
       <button class="btn btn-primary btn-block" type="submit">${existing ? 'Save changes' : 'Post offer'}</button>
     </form>`);
   const b = modal.body;
+  const current = () => menu.find((m) => m.id === Number($('#o-item', b).value));
   const preview = () => {
-    const price = Number($('#o-price', b).value.replace(/[$,]/g, ''));
+    const item = current();
+    $('#o-item-preview', b).innerHTML = `
+      ${item.image_path ? `<img class="thumb" src="${esc(item.image_path)}" alt="">` : '<div class="thumb" style="display:grid;place-items:center;font-size:30px">🍽️</div>'}
+      <div><b>${esc(item.name)}</b><div class="small muted">${esc(item.description || 'No description')}</div>
+        <div class="small" style="margin-top:4px">Menu price <b>${money(item.price_cents)}</b>${item.dietary ? ` · ${item.dietary.split(',').map((d) => `<span class="chip diet">${esc(d)}</span>`).join(' ')}` : ''}</div></div>`;
     const disc = Number($('#o-disc', b).value);
-    $('#o-preview', b).innerHTML = price > 0 && disc >= 1 && disc <= 90
-      ? `Customers pay <b>${money(Math.round(price * (100 - disc)))}</b> per item (plus ${pct(config.serviceFeeBps)} BiteBack service fee and ${pct(restaurant.tax_rate_bps)} sales tax).`
-      : 'Enter the original price and a discount from 1% to 90%.';
+    $('#o-preview', b).innerHTML = disc >= 1 && disc <= 90
+      ? `Customers pay <b>${money(Math.floor((item.price_cents * (100 - disc)) / 100 + 0.5))}</b> <span class="was">${money(item.price_cents)}</span> per item, plus ${pct(config.serviceFeeBps)} BiteBack service fee and ${pct(restaurant.tax_rate_bps)} sales tax.`
+      : 'Enter a discount from 1% to 90%.';
   };
   b.addEventListener('input', preview);
+  b.addEventListener('change', preview);
   preview();
+  $('#o-add-item', b).addEventListener('click', (e) => { e.preventDefault(); modal.close(); showTab('menu'); menuItemForm(); });
   $('#offer-form', b).addEventListener('submit', (e) => {
     e.preventDefault();
     const body = {
-      title: $('#o-title', b).value, description: $('#o-desc', b).value, reason: $('#o-reason', b).value,
-      originalPrice: $('#o-price', b).value, discountPct: $('#o-disc', b).value, quantity: $('#o-qty', b).value,
+      menuItemId: Number($('#o-item', b).value), description: $('#o-desc', b).value, reason: $('#o-reason', b).value,
+      discountPct: $('#o-disc', b).value, quantity: $('#o-qty', b).value,
       pickupStart: $('#o-start', b).value ? new Date($('#o-start', b).value).toISOString() : '',
       pickupEnd: $('#o-end', b).value ? new Date($('#o-end', b).value).toISOString() : '',
-      dietary: $$('.chips input:checked', b).map((i) => i.value),
     };
     withBusy($('button[type=submit]', b), async () => {
       try {
@@ -215,6 +241,164 @@ function offerForm(existing) {
     });
   });
 }
+
+// ---------- Menu ----------
+async function renderMenu(panel) {
+  const items = await loadMenu();
+  panel.innerHTML = `
+    <p class="muted" style="margin-top:-6px">Your menu, with photos. When you post surplus food, you pick the dish from here.</p>
+    <div class="menu-grid">
+      <button class="menu-card add" id="add-item" type="button"><div><div style="font-size:34px">＋</div>Add menu item</div></button>
+      ${items.map((m) => `
+      <div class="menu-card">
+        <div class="pic">${m.image_path ? `<img src="${esc(m.image_path)}" alt="${esc(m.name)}" loading="lazy">` : '📷'}</div>
+        <div class="body">
+          <h3>${esc(m.name)}</h3>
+          <div class="price" style="font-size:1.1rem">${money(m.price_cents)}</div>
+          ${m.dietary ? `<div class="chips">${m.dietary.split(',').map((d) => `<span class="chip diet">${esc(d)}</span>`).join('')}</div>` : ''}
+          <div class="actions">
+            <button class="btn btn-primary btn-sm" data-offer="${m.id}">Discount it</button>
+            <button class="btn btn-ghost btn-sm" data-edit-item="${m.id}">Edit</button>
+            <button class="btn btn-danger btn-sm" data-del-item="${m.id}" aria-label="Remove ${esc(m.name)}">✕</button>
+          </div>
+        </div>
+      </div>`).join('')}
+    </div>`;
+  $('#add-item', panel).addEventListener('click', () => menuItemForm());
+  panel.onclick = async (e) => {
+    const find = (attr) => items.find((m) => m.id === Number(e.target.closest(`[${attr}]`)?.getAttribute(attr)));
+    const offerItem = find('data-offer');
+    const editItem = find('data-edit-item');
+    const delItem = find('data-del-item');
+    if (offerItem) offerForm(undefined, offerItem.id);
+    if (editItem) menuItemForm(editItem);
+    if (delItem && confirm(`Remove "${delItem.name}" from your menu? Current offers stay live.`)) {
+      await api(`/restaurant/menu/${delItem.id}`, { method: 'DELETE' });
+      toast('Menu item removed');
+      renderMenu(panel);
+    }
+  };
+}
+
+// Resizes a chosen photo in the browser so uploads stay small (max 1200px, JPEG).
+function resizeImage(file, max = 1200) {
+  return new Promise((resolve, reject) => {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return reject(new Error('Please choose a JPEG, PNG or WebP photo.'));
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => reject(new Error('Could not read that photo.'));
+    img.src = url;
+  });
+}
+
+function menuItemForm(existing) {
+  const tags = existing?.dietary ? existing.dietary.split(',') : [];
+  const modal = openModal(existing ? 'Edit menu item' : 'Add menu item', `
+    <form id="item-form" novalidate>
+      <div class="field"><label>Photo</label>
+        <div class="photo-picker">
+          <div class="preview" id="i-preview">${existing?.image_path ? `<img src="${esc(existing.image_path)}" alt="">` : '📷'}</div>
+          <div><label class="btn btn-ghost btn-sm" style="margin:0">Choose photo<input type="file" id="i-file" accept="image/jpeg,image/png,image/webp" hidden></label>
+            <div class="hint">A bright, close-up photo sells best. JPEG, PNG or WebP.</div></div>
+        </div></div>
+      <div class="field"><label for="i-name">Dish name</label><input id="i-name" maxlength="80" value="${esc(existing?.name)}" placeholder="e.g. Chicken Pad Thai"></div>
+      <div class="field"><label for="i-desc">Description</label><textarea id="i-desc" maxlength="500" placeholder="Ingredients, portion size, allergens…">${esc(existing?.description)}</textarea></div>
+      <div class="field" style="max-width:200px"><label for="i-price">Menu price ($)</label><input id="i-price" inputmode="decimal" value="${existing ? (existing.price_cents / 100).toFixed(2) : ''}" placeholder="15.00"></div>
+      <div class="field"><label>Dietary tags</label><div class="chips">
+        ${config.dietaryTags.map((t) => `<label class="check chip" style="padding:6px 10px"><input type="checkbox" value="${t}" ${tags.includes(t) ? 'checked' : ''}> ${t}</label>`).join('')}</div></div>
+      <div id="i-msg"></div>
+      <button class="btn btn-primary btn-block" type="submit">${existing ? 'Save item' : 'Add to menu'}</button>
+    </form>`);
+  const b = modal.body;
+  let image = null;
+  $('#i-file', b).addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      image = await resizeImage(file);
+      $('#i-preview', b).innerHTML = `<img src="${image}" alt="">`;
+      showError($('#i-msg', b), null);
+    } catch (err) {
+      showError($('#i-msg', b), err);
+    }
+  });
+  $('#item-form', b).addEventListener('submit', (e) => {
+    e.preventDefault();
+    const body = {
+      name: $('#i-name', b).value, description: $('#i-desc', b).value, price: $('#i-price', b).value,
+      dietary: $$('.chips input:checked', b).map((i) => i.value), image: image || undefined,
+    };
+    withBusy($('button[type=submit]', b), async () => {
+      try {
+        if (existing) await api(`/restaurant/menu/${existing.id}`, { method: 'PUT', body });
+        else await api('/restaurant/menu', { method: 'POST', body });
+        modal.close();
+        toast(existing ? 'Menu item saved' : 'Added to your menu');
+        showTab('menu');
+      } catch (err) {
+        showError($('#i-msg', b), err);
+      }
+    });
+  });
+}
+
+// ---------- Live order alerts ----------
+let soundOn = true;
+try { soundOn = localStorage.getItem('bb-sound') !== 'off'; } catch { /* ignore */ }
+const soundBtn = $('#sound-btn');
+const syncSound = () => {
+  soundBtn.textContent = soundOn ? '🔔 Order sound: on' : '🔕 Order sound: off';
+  soundBtn.classList.toggle('off', !soundOn);
+  $('#sound-banner').classList.toggle('hidden', !soundOn || isUnlocked());
+};
+soundBtn.addEventListener('click', () => {
+  soundOn = !soundOn;
+  try { localStorage.setItem('bb-sound', soundOn ? 'on' : 'off'); } catch { /* ignore */ }
+  syncSound();
+  if (soundOn) setTimeout(() => ringBell(), 50);
+});
+unlockOnInteraction(syncSound);
+syncSound();
+
+const baseTitle = document.title;
+let flash;
+function announceOrder(order) {
+  if (soundOn) ringBell();
+  document.querySelector('.new-order')?.remove();
+  const el = document.createElement('div');
+  el.className = 'new-order';
+  el.setAttribute('role', 'alert');
+  el.innerHTML = `<div class="inner">
+    ${order.imageUrl ? `<img class="thumb sm" src="${esc(order.imageUrl)}" alt="">` : '<span class="bell">🛎️</span>'}
+    <div style="flex:1"><b>New order!</b><div class="small">${order.quantity} × ${esc(order.itemTitle)}</div>
+      <div class="small muted">${esc(order.customerUsername)} · ${money(order.totalCents)} · pick up by ${fmtTime(order.pickupEnd)}</div></div>
+    <span class="bell" aria-hidden="true">🔔</span></div>`;
+  el.addEventListener('click', () => el.remove());
+  document.body.append(el);
+  setTimeout(() => el.remove(), 12000);
+  clearInterval(flash);
+  let on = false;
+  let n = 0;
+  flash = setInterval(() => {
+    document.title = (on = !on) ? '🔔 New order! · BiteBack' : baseTitle;
+    if (++n > 12 || document.hasFocus()) { clearInterval(flash); document.title = baseTitle; }
+  }, 1000);
+  renderKpis();
+  if (currentTab === 'orders' || currentTab === 'offers') showTab(currentTab);
+}
+
+const stream = new EventSource('/api/restaurant/events');
+stream.addEventListener('order', (e) => announceOrder(JSON.parse(e.data)));
+
 $('#new-offer-btn').addEventListener('click', () => offerForm());
 
 // ---------- Orders ----------
@@ -224,7 +408,7 @@ async function renderOrders(panel) {
   panel.innerHTML = orders.length ? `<div class="card table-wrap" style="padding:8px"><table class="data">
     <thead><tr><th>#</th><th>Item</th><th>Customer</th><th>Food sales</th><th>Total charged</th><th>Status</th><th>When</th></tr></thead>
     <tbody>${orders.map((o) => `<tr>
-      <td>${o.id}</td><td>${o.quantity} × ${esc(o.itemTitle)}</td><td>${esc(o.customerUsername)}</td>
+      <td>${o.id}</td><td><div class="row" style="flex-wrap:nowrap;gap:10px">${o.imageUrl ? `<img class="thumb sm" src="${esc(o.imageUrl)}" alt="">` : ''}<span>${o.quantity} × ${esc(o.itemTitle)}</span></div></td><td>${esc(o.customerUsername)}</td>
       <td>${money(o.subtotalCents)}</td><td>${money(o.totalCents)}</td>
       <td><span class="status ${o.status}">${ORDER_LABELS[o.status] || o.status}</span></td>
       <td class="small">${fmtDateTime(o.pickedUpAt || o.createdAt)}</td></tr>`).join('')}</tbody></table></div>`

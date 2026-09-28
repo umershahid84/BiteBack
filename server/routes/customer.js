@@ -12,7 +12,7 @@ module.exports = function customerRoutes({ db, payments, orders }) {
   router.use(requireRole('customer'));
 
   const offerColumns = `
-    o.id, o.title, o.description, o.reason, o.dietary, o.original_price_cents, o.discount_pct,
+    o.id, o.title, o.image_path, o.description, o.reason, o.dietary, o.original_price_cents, o.discount_pct,
     o.quantity_total, o.quantity_available, o.pickup_start, o.pickup_end,
     r.id AS restaurant_id, r.name AS restaurant_name, r.cuisine, r.address, r.city, r.zip, r.phone, r.lat, r.lng, r.tax_rate_bps`;
 
@@ -21,6 +21,7 @@ module.exports = function customerRoutes({ db, payments, orders }) {
     const out = {
       id: row.id,
       title: row.title,
+      imageUrl: row.image_path || null,
       description: row.description,
       reason: row.reason,
       reasonLabel: v.OFFER_REASONS[row.reason] || 'Other',
@@ -168,6 +169,7 @@ module.exports = function customerRoutes({ db, payments, orders }) {
       id: o.id,
       status: o.status,
       itemTitle: o.item_title,
+      imageUrl: db.prepare('SELECT image_path FROM offers WHERE id = ?').get(o.offer_id)?.image_path || null,
       quantity: o.quantity,
       unitPriceCents: o.unit_price_cents,
       originalUnitPriceCents: o.original_unit_price_cents,

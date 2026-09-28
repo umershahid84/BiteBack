@@ -47,7 +47,9 @@ function render() {
   }
   grid.innerHTML = offers.map((o) => `
     <article class="offer">
-      <div class="offer-top" style="--h:${cuisineHue(o.restaurant.cuisine)}"><span class="emoji" aria-hidden="true">${cuisineEmoji(o.restaurant.cuisine)}</span>
+      <div class="offer-top ${o.imageUrl ? 'photo' : ''}" style="--h:${cuisineHue(o.restaurant.cuisine)}">${o.imageUrl
+        ? `<img src="${esc(o.imageUrl)}" alt="${esc(o.title)}" loading="lazy">`
+        : `<span class="emoji" aria-hidden="true">${cuisineEmoji(o.restaurant.cuisine)}</span>`}
         <span class="badge-off">-${o.discountPct}%</span>
         <span class="badge-left ${o.quantityAvailable <= 2 ? 'low' : ''}">${o.quantityAvailable} left</span>
       </div>
@@ -101,6 +103,7 @@ async function openCheckout(offer) {
   const r = offer.restaurant;
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${r.name}, ${r.address}, ${r.city}, WA ${r.zip}`)}`;
   const modal = openModal(offer.title, `
+    ${offer.imageUrl ? `<div class="checkout-photo"><img src="${esc(offer.imageUrl)}" alt="${esc(offer.title)}"><span class="badge-off">-${offer.discountPct}%</span></div>` : ''}
     <p style="margin:0 0 6px"><b>${esc(r.name)}</b>${r.cuisine ? ` · ${esc(r.cuisine)}` : ''}</p>
     <p class="small muted" style="margin:0 0 10px">${esc(r.address)}, ${esc(r.city)}, WA ${esc(r.zip)} · <a href="${mapUrl}" target="_blank" rel="noopener">Map</a>
       ${r.phone ? ` · <a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : ''}</p>
@@ -176,7 +179,7 @@ async function openCheckout(offer) {
         await cardEntry.handleAction(clientSecret);
         ({ order } = await api(`/orders/${order.id}/confirm-payment`, { method: 'POST' }));
       }
-      showConfirmation(modal, order);
+      showConfirmation(modal, order, offer);
       load();
     } catch (err) {
       showError(coMsg, err);
@@ -185,13 +188,13 @@ async function openCheckout(offer) {
   }));
 }
 
-function showConfirmation(modal, order) {
+function showConfirmation(modal, order, offer) {
   const r = order.restaurant;
   modal.el.querySelector('.modal-head h2').textContent = '';
   modal.body.innerHTML = `
     <div class="celebrate">
-      <div class="burst" aria-hidden="true">🎉</div>
-      <h2>Congratulations!</h2>
+      ${offer.imageUrl ? `<img class="photo" src="${esc(offer.imageUrl)}" alt="${esc(order.itemTitle)}">` : '<div class="burst" aria-hidden="true">🎉</div>'}
+      <h2>🎉 Congratulations!</h2>
       <p class="muted" style="margin:0">Your food is secured. You just rescued ${order.quantity === 1 ? 'a meal' : `${order.quantity} meals`} from going to waste.</p>
       <div class="pin-panel">
         <small>Your pickup PIN</small>
