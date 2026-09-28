@@ -8,16 +8,18 @@ BiteBack is a marketplace where restaurants in greater Seattle sell food that wo
 
 **Customers**
 1. Sign up free with an **email, user name and password**.
-2. Browse deals nearby. Filter by search, city/ZIP, dietary tags and distance (with "Use my location"), and sort by nearest, biggest discount, lowest price or ending soon. Each deal shows the restaurant, address, map link, why it's discounted, dietary tags, original vs. discounted price, quantity left and the pickup window.
+2. Browse deals nearby, each with a **photo of the food**. Filter by search, city/ZIP, dietary tags and distance (with "Use my location"), and sort by nearest, biggest discount, lowest price or ending soon. Each deal shows the restaurant, address, map link, why it's discounted, dietary tags, original vs. discounted price, quantity left and the pickup window.
 3. Review the total before ordering: **food price + 5% service fee + WA sales tax = total**.
 4. Pay by debit/credit card. Cards can be **saved for future use** (managed on the Account page).
-5. Get a **4-digit PIN**. A hold is placed on the card for the total. **The card is only charged when the order is picked up.**
+5. A confetti "Congratulations!" screen shows the **4-digit PIN**. A hold is placed on the card for the total. **The card is only charged when the order is picked up.**
 
 **Restaurants**
 1. Sign up as a restaurant (the same form, "I'm a restaurant" tab).
-2. Post surplus food: item, reason, original price, **your discount %**, quantity, pickup window and dietary tags. You can pause, edit or end an offer at any time.
-3. When a customer arrives, enter their PIN under **Verify pickup**, check the order, then press **Hand over food & charge**. That captures the payment.
-4. The dashboard shows orders awaiting pickup, order history and meals rescued/sales.
+2. Build your **Menu** with dish name, price, dietary tags and a **photo** (photos are resized in the browser before upload).
+3. Post surplus food by **choosing a dish from a drop-down of your menu**, then set the reason, **your discount %**, quantity and pickup window. Pause, edit or end an offer at any time.
+4. **New-order bell:** keep the dashboard open and it rings a counter bell ("ding-ding") and pops up the order the moment a customer orders. It uses a live Server-Sent Events connection. Browsers only allow sound after you click the page once, and the dashboard shows a reminder until you do. Sound can be switched off with the 🔔 button.
+5. When a customer arrives, enter their PIN under **Verify pickup**, check the order, then press **Hand over food & charge**. That captures the payment.
+6. The dashboard shows orders awaiting pickup, order history and meals rescued/sales.
 
 **Automatic cleanup:** unfinished checkouts are released after 15 minutes. Orders not picked up within 30 minutes of the pickup window closing are released **without charging the customer**. Expired offers are closed.
 
@@ -56,6 +58,8 @@ npm test                 # API + pricing tests
 Demo logins after seeding (password `BiteBack123`):
 - Customer: `demo`
 - Restaurants: `harborpho`, `ballardbread`, `caphilltacos`, `fremontpizza`, `bellevuecurry`, `redmondpoke`, `kirklandsushi`
+
+Demo menu photos in `public/assets/demo-food/` are generated illustrations (Noto Color Emoji, Apache 2.0). Replace them with real photos by editing each dish in the Menu tab. Uploaded photos are stored in `data/uploads/` (set `UPLOADS_DIR` to change this). Back that folder up along with the database.
 
 ## Project layout
 

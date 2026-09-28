@@ -8,6 +8,7 @@ const int = (v, d) => (v === undefined || v === '' ? d : Number.parseInt(v, 10))
 
 module.exports = {
   port: int(process.env.PORT, 3000),
+  uploadsDir: process.env.UPLOADS_DIR || path.join(__dirname, '..', 'data', 'uploads'),
   databasePath: process.env.DATABASE_PATH || path.join(__dirname, '..', 'data', 'biteback.db'),
   serviceFeeBps: int(process.env.SERVICE_FEE_BPS, 500),
   defaultTaxRateBps: int(process.env.DEFAULT_TAX_RATE_BPS, 1035),

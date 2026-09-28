@@ -18,7 +18,8 @@ async function setup() {
   const voidFn = payments.void.bind(payments);
   payments.capture = (ref) => { captured.push(ref); return capture(ref); };
   payments.void = (ref) => { voided.push(ref); return voidFn(ref); };
-  const { app, orders } = createApp({ db, config, payments });
+  const uploadsDir = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'bb-uploads-'));
+  const { app, orders } = createApp({ db, config: { ...config, uploadsDir }, payments });
   const server = app.listen(0);
   await new Promise((r) => server.once('listening', r));
   const base = `http://127.0.0.1:${server.address().port}/api`;
@@ -36,7 +37,16 @@ async function setup() {
       return { status: res.status, body: await res.json() };
     };
   }
-  return { db, orders, server, client, captured, voided };
+  return { db, orders, server, client, captured, voided, base };
+}
+
+// 1x1 PNG
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+async function menuItem(shop, name, price, extra = {}) {
+  const r = await shop('/restaurant/menu', { method: 'POST', body: { name, price, ...extra } });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  return r.body.item.id;
 }
 
 const card = (last4 = '4242') => ({ brand: 'visa', last4, expMonth: 12, expYear: new Date().getFullYear() + 2 });
@@ -54,9 +64,9 @@ test('full flow: sign up, post offer, order, verify PIN, charge at pickup', asyn
 
   const start = new Date(Date.now() - 60000).toISOString();
   const end = new Date(Date.now() + 3 * 3600000).toISOString();
+  const padThai = await menuItem(shop, 'Pad Thai', '20.00', { dietary: ['spicy'], image: PNG });
   r = await shop('/restaurant/offers', { method: 'POST', body: {
-    title: 'Pad Thai', reason: 'wrong_order', originalPrice: '20.00', discountPct: 50, quantity: 3,
-    pickupStart: start, pickupEnd: end, dietary: ['spicy'],
+    menuItemId: padThai, reason: 'wrong_order', discountPct: 50, quantity: 3, pickupStart: start, pickupEnd: end,
   } });
   assert.equal(r.status, 201, JSON.stringify(r.body));
   const offerId = r.body.offer.id;
@@ -72,7 +82,13 @@ test('full flow: sign up, post offer, order, verify PIN, charge at pickup', asyn
 
   r = await alice('/offers');
   assert.equal(r.body.offers.length, 1);
+  assert.equal(r.body.offers[0].title, 'Pad Thai');
   assert.equal(r.body.offers[0].priceCents, 1000);
+  assert.deepEqual(r.body.offers[0].dietary, ['spicy']);
+  assert.match(r.body.offers[0].imageUrl, /^\/uploads\/[0-9a-f]+\.png$/);
+  const photo = await fetch(env.base.replace('/api', '') + r.body.offers[0].imageUrl);
+  assert.equal(photo.status, 200);
+  assert.equal(photo.headers.get('content-type'), 'image/png');
 
   r = await alice('/quote', { method: 'POST', body: { offerId, quantity: 2 } });
   assert.deepEqual(
@@ -134,8 +150,9 @@ test('declined card releases the reserved food', async (t) => {
     role: 'restaurant', email: 'o@example.com', username: 'shop', password: 'secret123',
     restaurant: { name: 'Shop', address: '1 Main', city: 'Bellevue', zip: '98004' },
   } });
+  const curry = await menuItem(shop, 'Curry', 10);
   const { body } = await shop('/restaurant/offers', { method: 'POST', body: {
-    title: 'Curry', reason: 'overproduction', originalPrice: 10, discountPct: 40, quantity: 1,
+    menuItemId: curry, reason: 'overproduction', discountPct: 40, quantity: 1,
     pickupStart: new Date().toISOString(), pickupEnd: new Date(Date.now() + 3600000).toISOString(),
   } });
 
@@ -157,8 +174,9 @@ test('cancel releases hold; missed pickups expire without charge', async (t) => 
     role: 'restaurant', email: 'o@example.com', username: 'shop', password: 'secret123',
     restaurant: { name: 'Shop', address: '1 Main', city: 'Redmond', zip: '98052' },
   } });
+  const poke = await menuItem(shop, 'Poke', 16);
   const { body } = await shop('/restaurant/offers', { method: 'POST', body: {
-    title: 'Poke', reason: 'end_of_day', originalPrice: 16, discountPct: 45, quantity: 5,
+    menuItemId: poke, reason: 'end_of_day', discountPct: 45, quantity: 5,
     pickupStart: new Date().toISOString(), pickupEnd: new Date(Date.now() + 3600000).toISOString(),
   } });
   const offerId = body.offer.id;
@@ -204,4 +222,71 @@ test('security: CSRF header required, roles enforced, PIN brute force limited', 
   let last;
   for (let i = 0; i < 16; i++) last = await shop('/restaurant/pickup/lookup', { method: 'POST', body: { pin: String(i).padStart(4, '0') } });
   assert.equal(last.status, 429);
+});
+
+test('menu: offers must come from the restaurant\'s own menu; bad photos rejected', async (t) => {
+  const env = await setup();
+  t.after(() => env.server.close());
+  const a = env.client();
+  const b = env.client();
+  for (const [c, u] of [[a, 'shop_a'], [b, 'shop_b']]) {
+    await c('/auth/signup', { method: 'POST', body: {
+      role: 'restaurant', email: `${u}@example.com`, username: u, password: 'secret123',
+      restaurant: { name: u, address: '1 Main', city: 'Seattle', zip: '98101' },
+    } });
+  }
+  let r = await a('/restaurant/menu', { method: 'POST', body: { name: 'Soup', price: 5, image: 'data:image/png;base64,SGVsbG8=' } });
+  assert.equal(r.status, 400, 'non-image bytes rejected');
+  const soup = await menuItem(a, 'Soup', 5);
+  const times = { pickupStart: new Date().toISOString(), pickupEnd: new Date(Date.now() + 3600000).toISOString() };
+  r = await b('/restaurant/offers', { method: 'POST', body: { menuItemId: soup, reason: 'other', discountPct: 30, quantity: 1, ...times } });
+  assert.equal(r.status, 404, 'cannot offer another restaurant\'s menu item');
+  r = await a('/restaurant/offers', { method: 'POST', body: { reason: 'other', discountPct: 30, quantity: 1, ...times } });
+  assert.equal(r.status, 404, 'menu item required');
+  r = await a('/restaurant/menu');
+  assert.equal(r.body.items.length, 1);
+  r = await a(`/restaurant/menu/${soup}`, { method: 'DELETE' });
+  assert.equal(r.body.items.length, 0);
+});
+
+test('restaurant gets a live event when an order is placed', async (t) => {
+  const env = await setup();
+  t.after(() => env.server.close());
+  const shop = env.client();
+  let r = await shop('/auth/signup', { method: 'POST', body: {
+    role: 'restaurant', email: 'o@example.com', username: 'shop', password: 'secret123',
+    restaurant: { name: 'Shop', address: '1 Main', city: 'Seattle', zip: '98101' },
+  } });
+  const item = await menuItem(shop, 'Noodles', 12);
+  r = await shop('/restaurant/offers', { method: 'POST', body: {
+    menuItemId: item, reason: 'other', discountPct: 50, quantity: 2,
+    pickupStart: new Date().toISOString(), pickupEnd: new Date(Date.now() + 3600000).toISOString(),
+  } });
+  const offerId = r.body.offer.id;
+
+  // Open the event stream with the restaurant's session cookie.
+  const login = await fetch(`${env.base}/auth/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-requested-with': 'BiteBack' },
+    body: JSON.stringify({ login: 'shop', password: 'secret123' }),
+  });
+  const ctrl = new AbortController();
+  const stream = await fetch(`${env.base}/restaurant/events`, { headers: { cookie: login.headers.get('set-cookie').split(';')[0] }, signal: ctrl.signal });
+  assert.equal(stream.headers.get('content-type'), 'text/event-stream');
+  const reader = stream.body.getReader();
+  const received = (async () => {
+    let text = '';
+    while (!text.includes('event: order')) text += new TextDecoder().decode((await reader.read()).value);
+    return text;
+  })();
+
+  const c = env.client();
+  await c('/auth/signup', { method: 'POST', body: { email: 'c@example.com', username: 'carol', password: 'password1' } });
+  r = await c('/orders', { method: 'POST', body: { offerId, quantity: 2, newCard: { token: card() } } });
+  assert.equal(r.status, 201);
+  const text = await received;
+  const data = JSON.parse(text.split('event: order\ndata: ')[1].split('\n')[0]);
+  assert.equal(data.itemTitle, 'Noodles');
+  assert.equal(data.quantity, 2);
+  assert.equal(data.pin, undefined, 'PIN is never sent to the restaurant');
+  ctrl.abort();
 });

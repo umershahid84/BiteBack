@@ -18,21 +18,44 @@ const RESTAURANTS = [
   { user: 'kirklandsushi', name: 'Kirkland Sushi Bar', cuisine: 'Japanese', address: '120 Park Ln', city: 'Kirkland', zip: '98033', lat: 47.6760, lng: -122.2060, tax: 1030 },
 ];
 
-// [restaurant user, title, description, reason, dietary, price, discount %, qty, starts in (h), window (h)]
+// Menus: [restaurant user, item name, description, dietary, price, demo photo]
+const MENU = [
+  ['harborpho', 'Large Beef Pho', 'Rare steak & brisket in 12-hour beef broth with rice noodles, herbs and lime.', '', 16.95, 'beef-pho'],
+  ['harborpho', 'Lemongrass Tofu Banh Mi', 'Crispy lemongrass tofu, pickled carrot, cucumber and cilantro on a toasted baguette.', 'vegetarian,dairy-free', 11.5, 'tofu-banh-mi'],
+  ['harborpho', 'Fresh Spring Rolls (3)', 'Shrimp, vermicelli and herbs with peanut sauce.', 'gluten-free', 8.5, 'spring-rolls'],
+  ['ballardbread', 'Bakery Surprise Bag', 'Assorted croissants, scones and a loaf from today.', 'vegetarian', 24, 'surprise-bag'],
+  ['ballardbread', 'Seeded Sourdough Loaf', 'Naturally leavened, baked this morning.', 'vegan', 9, 'sourdough'],
+  ['ballardbread', 'Chocolate Croissant', 'All-butter croissant with dark chocolate.', 'vegetarian', 5, 'choc-croissant'],
+  ['caphilltacos', 'Carnitas Burrito Plate', 'Slow-cooked pork, rice, beans and salsa verde.', 'gluten-free', 15.25, 'burrito-plate'],
+  ['caphilltacos', 'Veggie Taco Trio', 'Roasted sweet potato, black bean and poblano tacos.', 'vegetarian', 12, 'veggie-tacos'],
+  ['caphilltacos', 'Chips & Guacamole', 'House-made tortilla chips and fresh guacamole.', 'vegan,gluten-free', 7, 'chips-guac'],
+  ['fremontpizza', 'Whole Margherita Pizza (16")', 'San Marzano tomato, fresh mozzarella and basil.', 'vegetarian', 24, 'margherita'],
+  ['fremontpizza', 'Pepperoni Slices (2)', 'Two big New York-style slices.', '', 8, 'pepperoni'],
+  ['fremontpizza', 'Caesar Salad', 'Romaine, parmesan, croutons and lemon Caesar dressing.', 'vegetarian', 10, 'caesar-salad'],
+  ['bellevuecurry', 'Chicken Tikka Masala + Rice', 'Tandoori chicken in creamy tomato masala with basmati rice.', 'gluten-free', 17.5, 'tikka-masala'],
+  ['bellevuecurry', 'Chana Masala Bowl', 'Chickpeas simmered with tomato, ginger and spices.', 'vegan,gluten-free', 13, 'chana-masala'],
+  ['bellevuecurry', 'Garlic Naan', 'Fresh from the tandoor.', 'vegetarian', 4.5, 'garlic-naan'],
+  ['redmondpoke', 'Ahi Poke Bowl (Regular)', 'Ahi tuna, avocado, cucumber and seaweed salad over rice.', 'dairy-free', 16, 'poke-bowl'],
+  ['kirklandsushi', "Chef's Nigiri Set (8 pc)", "Chef's selection of seasonal nigiri.", 'gluten-free', 32, 'nigiri'],
+  ['kirklandsushi', 'Veggie Roll Combo', 'Avocado, cucumber and sweet potato rolls.', 'vegan', 14, 'veggie-rolls'],
+  ['kirklandsushi', 'Miso Soup', 'Tofu, wakame and scallion.', 'vegan', 4, 'miso-soup'],
+];
+
+// Offers: [restaurant user, menu item name, reason, note (optional), discount %, qty, starts in (h), window (h)]
 const OFFERS = [
-  ['harborpho', 'Large Beef Pho', 'Rare steak & brisket pho. Customer ordered chicken instead — broth and noodles packed separately.', 'wrong_order', '', 16.95, 50, 2, 0, 3],
-  ['harborpho', 'Lemongrass Tofu Banh Mi', 'Freshly made, delivery driver never arrived.', 'delayed_order', 'vegetarian,dairy-free', 11.5, 40, 3, 0, 2],
-  ['ballardbread', 'Bakery Surprise Bag', 'Assorted croissants, scones and a sourdough loaf from today.', 'end_of_day', 'vegetarian', 24, 65, 6, 1, 3],
-  ['ballardbread', 'Seeded Sourdough Loaf', 'Baked this morning.', 'overproduction', 'vegan', 9, 45, 4, 0, 5],
-  ['caphilltacos', 'Carnitas Burrito Plate', 'Order was placed twice by mistake. Rice, beans & salsa verde.', 'wrong_order', 'gluten-free', 15.25, 55, 1, 0, 2],
-  ['caphilltacos', 'Taco Trio (Veggie)', 'Roasted sweet potato, black bean & poblano tacos.', 'unclaimed_order', 'vegetarian', 12, 40, 2, 0, 4],
-  ['fremontpizza', 'Whole Margherita Pizza (16")', 'Pickup order never collected. Still warm!', 'unclaimed_order', 'vegetarian', 24, 60, 1, 0, 2],
-  ['fremontpizza', 'Pepperoni Slices (2)', 'End of lunch service slices.', 'end_of_day', '', 8, 50, 8, 0, 3],
-  ['bellevuecurry', 'Chicken Tikka Masala + Rice', 'Catering overage from a corporate lunch.', 'overproduction', 'gluten-free', 17.5, 50, 10, 0, 4],
-  ['bellevuecurry', 'Chana Masala Bowl', 'Delivery was delayed and cancelled by customer.', 'delayed_order', 'vegan,gluten-free', 13, 45, 2, 0, 3],
-  ['redmondpoke', 'Ahi Poke Bowl (Regular)', 'Wrong base (white rice instead of brown).', 'wrong_order', 'dairy-free', 16, 45, 1, 0, 2],
-  ['kirklandsushi', 'Chef\'s Nigiri Set (8 pc)', 'Prepared for a reservation that did not show.', 'unclaimed_order', 'gluten-free', 32, 40, 2, 0, 3],
-  ['kirklandsushi', 'Veggie Roll Combo', 'End-of-day rolls, made fresh this afternoon.', 'end_of_day', 'vegan', 14, 50, 5, 1, 3],
+  ['harborpho', 'Large Beef Pho', 'wrong_order', 'Customer ordered chicken instead. Broth and noodles packed separately.', 50, 2, 0, 3],
+  ['harborpho', 'Lemongrass Tofu Banh Mi', 'delayed_order', 'Freshly made, delivery driver never arrived.', 40, 3, 0, 2],
+  ['ballardbread', 'Bakery Surprise Bag', 'end_of_day', '', 65, 6, 1, 3],
+  ['ballardbread', 'Seeded Sourdough Loaf', 'overproduction', '', 45, 4, 0, 5],
+  ['caphilltacos', 'Carnitas Burrito Plate', 'wrong_order', 'Order was placed twice by mistake.', 55, 1, 0, 2],
+  ['caphilltacos', 'Veggie Taco Trio', 'unclaimed_order', '', 40, 2, 0, 4],
+  ['fremontpizza', 'Whole Margherita Pizza (16")', 'unclaimed_order', 'Pickup order never collected. Still warm!', 60, 1, 0, 2],
+  ['fremontpizza', 'Pepperoni Slices (2)', 'end_of_day', '', 50, 8, 0, 3],
+  ['bellevuecurry', 'Chicken Tikka Masala + Rice', 'overproduction', 'Catering overage from a corporate lunch.', 50, 10, 0, 4],
+  ['bellevuecurry', 'Chana Masala Bowl', 'delayed_order', '', 45, 2, 0, 3],
+  ['redmondpoke', 'Ahi Poke Bowl (Regular)', 'wrong_order', 'Wrong base (white rice instead of brown).', 45, 1, 0, 2],
+  ['kirklandsushi', "Chef's Nigiri Set (8 pc)", 'unclaimed_order', 'Prepared for a reservation that did not show.', 40, 2, 0, 3],
+  ['kirklandsushi', 'Veggie Roll Combo', 'end_of_day', '', 50, 5, 1, 3],
 ];
 
 function main() {
@@ -56,14 +79,23 @@ function main() {
         .run(uid, r.name, r.cuisine, `Neighborhood ${r.cuisine.toLowerCase()} spot in ${r.city}.`, r.address, r.city, r.zip,
           '(206) 555-01' + String(Object.keys(ids).length).padStart(2, '0'), r.lat, r.lng, r.tax).lastInsertRowid);
     }
+    const menuIds = {};
+    for (const [user, name, desc, dietary, price, photo] of MENU) {
+      const existing = db.prepare('SELECT id FROM menu_items WHERE restaurant_id = ? AND name = ? AND active = 1').get(ids[user], name);
+      menuIds[`${user}|${name}`] = existing ? existing.id : Number(db.prepare(`
+        INSERT INTO menu_items (restaurant_id, name, description, price_cents, dietary, image_path) VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(ids[user], name, desc, Math.round(price * 100), dietary, `/assets/demo-food/${photo}.jpg`).lastInsertRowid);
+    }
     const now = Date.now();
     const hour = 3600 * 1000;
-    for (const [user, title, desc, reason, dietary, price, pct, qty, startIn, windowH] of OFFERS) {
+    for (const [user, itemName, reason, note, pct, qty, startIn, windowH] of OFFERS) {
+      const item = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(menuIds[`${user}|${itemName}`]);
       const start = new Date(now + startIn * hour - 10 * 60 * 1000);
       const end = new Date(start.getTime() + windowH * hour);
-      db.prepare(`INSERT INTO offers (restaurant_id, title, description, reason, dietary, original_price_cents, discount_pct,
-                  quantity_total, quantity_available, pickup_start, pickup_end) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(ids[user], title, desc, reason, dietary, Math.round(price * 100), pct, qty, qty, start.toISOString(), end.toISOString());
+      db.prepare(`INSERT INTO offers (restaurant_id, menu_item_id, image_path, title, description, reason, dietary, original_price_cents,
+                  discount_pct, quantity_total, quantity_available, pickup_start, pickup_end) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(ids[user], item.id, item.image_path, item.name, note || item.description, reason, item.dietary, item.price_cents,
+          pct, qty, qty, start.toISOString(), end.toISOString());
     }
   });
 
