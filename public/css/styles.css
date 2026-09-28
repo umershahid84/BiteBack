@@ -384,3 +384,45 @@ table.data tbody tr:hover { background: color-mix(in srgb, var(--surface-2) 60%,
   .paper { box-shadow: none; border-radius: 0; padding: 0; }
   .paper .p-facts, .paper .p-kpis > div, .paper .p-pin, .paper .st, .paper .report-table tbody tr { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ---------- Map view ---------- */
+.view-toggle { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
+.view-toggle button { border: 0; background: none; color: var(--muted); font: 700 .86rem var(--font-body); padding: 7px 14px; border-radius: 999px; cursor: pointer; }
+.view-toggle button.on { background: var(--primary-soft); color: var(--primary-ink); }
+.map-wrap { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow); margin-bottom: 24px; }
+#map { height: min(72vh, 680px); min-height: 420px; background: #0c1712; }
+#map.dark-tiles .leaflet-tile-pane, .pin-map.dark-tiles .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88) saturate(.55); }
+.leaflet-container { font-family: var(--font-body); }
+.leaflet-control-zoom a { background: var(--surface) !important; color: var(--ink) !important; border-color: var(--line) !important; }
+.leaflet-control-attribution { background: rgba(7, 17, 13, .75) !important; color: var(--muted) !important; }
+.leaflet-control-attribution a { color: var(--primary-ink) !important; }
+.map-pin-wrap { background: none; border: 0; }
+.map-pin { position: relative; display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px 5px 6px; border-radius: 999px; background: var(--grad); color: #04130d; font: 800 .82rem var(--font-head); box-shadow: 0 6px 16px -4px rgba(0, 0, 0, .6); white-space: nowrap; transition: transform .15s; }
+.map-pin::after { content: ''; position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #059669; border-bottom: 0; }
+.map-pin span { width: 22px; height: 22px; display: grid; place-items: center; background: rgba(255, 255, 255, .85); border-radius: 50%; font-size: 13px; }
+.map-pin i { font-style: normal; background: #04130d; color: #6ee7b7; border-radius: 999px; padding: 0 6px; font-size: .7rem; }
+.leaflet-marker-icon:hover .map-pin { transform: scale(1.08); }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface); color: var(--ink); border: 1px solid var(--line); box-shadow: var(--shadow-lg); }
+.leaflet-popup-content-wrapper { border-radius: 18px; }
+.leaflet-popup-content { margin: 14px; }
+.leaflet-container a.leaflet-popup-close-button { color: var(--muted); }
+.map-popup .mp-head { margin-bottom: 8px; }
+.map-popup .mp-head b { display: block; font: 700 1rem var(--font-head); }
+.map-popup .mp-head span, .map-popup small { color: var(--muted); font-size: .78rem; display: block; }
+.map-popup .mp-offer { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.map-popup .mp-offer img, .map-popup .mp-emoji { width: 48px; height: 48px; border-radius: 10px; object-fit: cover; flex-shrink: 0; background: var(--surface-2); display: grid; place-items: center; font-size: 24px; }
+.map-popup .mp-info { flex: 1; min-width: 0; font-size: .85rem; line-height: 1.35; }
+.map-popup .mp-info b { display: block; }
+.map-popup .mp-price { font-weight: 800; }
+.map-popup s { color: var(--muted); }
+.map-popup .mp-off { color: var(--accent-ink); font-weight: 700; }
+.map-popup .btn { padding: 6px 12px; }
+.pin-map { height: 280px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); margin-bottom: 12px; }
+/* Keep overlays above the map (Leaflet panes use z-index up to ~1000). */
+.site-header { z-index: 1100; }
+.new-order { z-index: 1900; }
+.modal-backdrop { z-index: 2000; }
+.confetti-canvas { z-index: 2050; }
+.toast { z-index: 2100; }
+.pin-map, .pin-map.leaflet-container { background: #0c1712; }
+.qty button:disabled { opacity: .35; cursor: not-allowed; }

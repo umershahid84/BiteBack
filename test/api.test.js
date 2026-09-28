@@ -373,3 +373,48 @@ test('dayRange handles Pacific time and DST', () => {
   assert.deepEqual(dayRange('2026-07-04', 'America/Los_Angeles'), { start: '2026-07-04T07:00:00.000Z', end: '2026-07-05T07:00:00.000Z' });
   assert.deepEqual(dayRange('2026-03-08', 'America/Los_Angeles'), { start: '2026-03-08T08:00:00.000Z', end: '2026-03-09T07:00:00.000Z' });
 });
+
+test('quantity is limited only by what the restaurant made available; area search and auto map pins', async (t) => {
+  const env = await setup();
+  t.after(() => env.server.close());
+  const signupShop = async (u, city, zip) => {
+    const c = env.client();
+    const r = await c('/auth/signup', { method: 'POST', body: {
+      role: 'restaurant', email: `${u}@example.com`, username: u, password: 'secret123',
+      restaurant: { name: u, address: '1 Main St', city, zip },
+    } });
+    assert.equal(r.status, 201);
+    assert.ok(r.body.user.restaurant.lat, 'pinned from ZIP code');
+    return c;
+  };
+  const tacoma = await signupShop('tacoma_shop', 'Tacoma', '98402');
+  const oly = await signupShop('oly_shop', 'Olympia', '98501');
+  const times = { pickupStart: new Date().toISOString(), pickupEnd: new Date(Date.now() + 3600000).toISOString() };
+  let r = await tacoma('/restaurant/offers', { method: 'POST', body: { menuItemId: await menuItem(tacoma, 'Tacos', 12), reason: 'other', discountPct: 50, quantity: 15, ...times } });
+  const tacos = r.body.offer.id;
+  await oly('/restaurant/offers', { method: 'POST', body: { menuItemId: await menuItem(oly, 'Pizza', 20), reason: 'other', discountPct: 50, quantity: 2, ...times } });
+
+  const c = env.client();
+  await c('/auth/signup', { method: 'POST', body: { email: 'eve@example.com', username: 'eve', password: 'password1' } });
+
+  r = await c('/offers?area=Tacoma');
+  assert.equal(r.body.place.label, 'Tacoma, WA');
+  assert.deepEqual(r.body.offers.map((o) => o.title), ['Tacos'], 'Olympia is outside 10 miles of Tacoma');
+  r = await c('/offers?area=Tacoma&radius=50');
+  assert.equal(r.body.offers.length, 2);
+  r = await c('/offers?area=98501');
+  assert.deepEqual(r.body.offers.map((o) => o.title), ['Pizza']);
+
+  r = await c('/quote', { method: 'POST', body: { offerId: tacos, quantity: 16 } });
+  assert.equal(r.status, 409);
+  assert.match(r.body.error, /Only 15 available/);
+  r = await c('/orders', { method: 'POST', body: { offerId: tacos, quantity: 12, newCard: { token: card() } } });
+  assert.equal(r.status, 201, 'more than 10 is fine when the restaurant has them');
+  r = await c('/orders', { method: 'POST', body: { offerId: tacos, quantity: 4, newCard: { token: card() } } });
+  assert.equal(r.status, 409, 'only 3 left');
+
+  const areas = await (await fetch(`${env.base}/auth/areas`)).json();
+  for (const city of ['Des Moines', 'Kent', 'Federal Way', 'Tacoma', 'Fife', 'Olympia']) {
+    assert.ok(areas.cities.some((x) => x.name === city), city);
+  }
+});

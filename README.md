@@ -8,8 +8,8 @@ BiteBack is a marketplace where restaurants in greater Seattle sell food that wo
 
 **Customers**
 1. Sign up free with an **email, user name and password**.
-2. Browse deals nearby, each with a **photo of the food**. Filter by search, city/ZIP, dietary tags and distance (with "Use my location"), and sort by nearest, biggest discount, lowest price or ending soon. Each deal shows the restaurant, address, map link, why it's discounted, dietary tags, original vs. discounted price, quantity left and the pickup window.
-3. Review the total before ordering: **food price + 5% service fee + WA sales tax = total**.
+2. Browse deals nearby as a **list** or on an **interactive map** (zoom in/out, click a pin to see that restaurant's deals and order). Search by any city or ZIP code in King, Pierce, Thurston, Snohomish and Kitsap counties (Seattle, Des Moines, Kent, Federal Way, Tacoma, Fife, Olympia, Lacey, Puyallup, Everett, Bremerton and more), or use your location. Filter by dietary tags and distance, and sort by nearest, biggest discount, lowest price or ending soon. Each deal shows the restaurant, address, map link, why it's discounted, dietary tags, original vs. discounted price, quantity left and the pickup window.
+3. Choose a quantity. **Customers can't order more than the restaurant made available.** Then review the total before ordering: **food price + 5% service fee + WA sales tax = total**.
 4. Pay by debit/credit card. Cards can be **saved for future use** (managed on the Account page).
 5. A confetti "Congratulations!" screen shows the **4-digit PIN**. A hold is placed on the card for the total. **The card is only charged when the order is picked up.**
 
@@ -68,9 +68,15 @@ npm test                 # API + pricing tests
 
 Demo logins after seeding (password `BiteBack123`):
 - Customer: `demo`
-- Restaurants: `harborpho`, `ballardbread`, `caphilltacos`, `fremontpizza`, `bellevuecurry`, `redmondpoke`, `kirklandsushi`
+- Restaurants (all fictional) in Seattle and the Eastside: `harborpho`, `ballardbread`, `caphilltacos`, `fremontpizza`, `bellevuecurry`, `redmondpoke`, `kirklandsushi`
+- Restaurants around the region: `desmoinesfish` (Des Moines), `kentteriyaki` and `kentpupusas` (Kent), `fedwaykbbq` and `fedwaybakery` (Federal Way), `tacomathai`, `tacomaburger` and `tacomatamales` (Tacoma), `fifepho` (Fife), `olympiacafe` and `olympiapizza` (Olympia), `laceycurry` (Lacey), `puyallupdeli` (Puyallup), `auburnnoodle` (Auburn), `rentontacos` (Renton), `burienmed` (Burien), `tukwilasushi` (Tukwila), `lakewoodsoul` (Lakewood), `everettbbq` (Everett), `lynnwoodgreens` (Lynnwood), `bremertonchowder` (Bremerton), `issaquahbakehouse` (Issaquah)
 
 **Food photos:** restaurants upload real photos in the Menu tab (dish → Edit → Choose photo). The demo dishes start without photos. To give them photos, put JPEGs you have the rights to in `public/assets/demo-food/`, named as in the `MENU` list in `server/seed.js` (e.g. `beef-pho.jpg`), then re-run `npm run seed` on a fresh database. Uploaded photos are stored in `data/uploads/` (set `UPLOADS_DIR` to change this). Back that folder up along with the database.
+
+**Map & service area:**
+- **Tiles:** maps use Leaflet with OpenStreetMap tiles (`MAP_TILE_URL`, `MAP_ATTRIBUTION`). OSM's free tile server is fine for development and light traffic. For a real launch, switch to a tile provider such as MapTiler, Stadia Maps or Mapbox, and set `MAP_DARK_FILTER=false` if you use a dark style.
+- **Restaurant pins:** a restaurant is pinned at its ZIP code's center when it signs up. The owner can drag the pin to the exact spot under Profile & tax.
+- **ZIP data:** `server/data/puget-sound-zips.json` lists 186 ZIP codes. ZIP list from USPS (via the MIT-licensed `zipcodes` package); coordinates © GeoNames (geonames.org), CC BY 4.0.
 
 ## Project layout
 

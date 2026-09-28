@@ -8,6 +8,7 @@
 <meta name="theme-color" content="#07110d">
 <link rel="icon" href="/assets/logo-mark.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
@@ -17,11 +18,16 @@
     <div class="page-head">
       <div><h1>Deals near you</h1><p class="muted" id="subtitle" style="margin:4px 0 0">Discounted food ready for pickup around greater Seattle.</p></div>
       <span class="spacer"></span>
+      <div class="view-toggle" role="tablist" aria-label="View">
+        <button type="button" data-view="list" class="on" role="tab">☰ List</button>
+        <button type="button" data-view="map" role="tab">🗺️ Map</button>
+      </div>
       <button class="btn btn-ghost btn-sm" id="locate-btn">📍 Use my location</button>
     </div>
     <form class="filters" id="filters">
       <input class="wide" id="f-q" type="search" placeholder="Search food, restaurant or cuisine" aria-label="Search">
-      <input id="f-area" placeholder="City or ZIP" aria-label="City or ZIP">
+      <input id="f-area" placeholder="City or ZIP (e.g. Tacoma, 98198)" aria-label="City or ZIP" list="area-list" autocomplete="off">
+      <datalist id="area-list"></datalist>
       <select id="f-diet" aria-label="Dietary"><option value="">Any diet</option></select>
       <select id="f-sort" aria-label="Sort">
         <option value="">Best match</option><option value="distance">Nearest</option><option value="discount">Biggest discount</option>
@@ -33,9 +39,12 @@
       </select>
     </form>
     <div id="msg"></div>
+    <div id="area-note" class="small muted" style="margin:-10px 0 16px"></div>
+    <div id="map-wrap" class="map-wrap hidden"><div id="map" aria-label="Map of deals"></div></div>
     <div id="offers" class="offer-grid" aria-live="polite"></div>
   </div>
 </main>
+<script src="/vendor/leaflet/leaflet.js"></script>
 <script type="module" src="/js/offers.js"></script>
 </body>
 </html>

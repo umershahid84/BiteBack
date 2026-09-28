@@ -432,7 +432,8 @@ function renderProfile(panel) {
         <div class="field"><label for="p-phone">Phone</label><input id="p-phone" value="${esc(r.phone)}"></div>
       </div>
       <div class="section-label">Map location</div>
-      <p class="small muted">Lets customers sort deals by distance. Click the button while at the restaurant, or enter coordinates.</p>
+      <p class="small muted">This is where your pin appears on the customer map. Drag the pin (or click the map) to your front door, or use your current location.</p>
+      <div class="pin-map" id="p-map"></div>
       <div class="grid-3">
         <div class="field"><label for="p-lat">Latitude</label><input id="p-lat" value="${r.lat ?? ''}"></div>
         <div class="field"><label for="p-lng">Longitude</label><input id="p-lng" value="${r.lng ?? ''}"></div>
@@ -444,10 +445,29 @@ function renderProfile(panel) {
       <div id="p-msg"></div>
       <button class="btn btn-green" type="submit">Save profile</button>
     </form>`;
-  $('#p-locate').addEventListener('click', () => navigator.geolocation?.getCurrentPosition((pos) => {
-    $('#p-lat').value = pos.coords.latitude.toFixed(5);
-    $('#p-lng').value = pos.coords.longitude.toFixed(5);
-  }, () => toast('Could not get your location.')));
+  // Pin picker map.
+  const L = window.L;
+  const start = [Number(r.lat) || 47.45, Number(r.lng) || -122.3];
+  const pinMap = L.map('p-map', { scrollWheelZoom: false }).setView(start, r.lat ? 15 : 9);
+  L.tileLayer(config.map.tileUrl, { attribution: config.map.attribution, maxZoom: 19 }).addTo(pinMap);
+  if (config.map.darkFilter) $('#p-map').classList.add('dark-tiles');
+  const pin = L.marker(start, { draggable: true, title: 'Drag to your location' }).addTo(pinMap);
+  const setPin = (lat, lng, zoom) => {
+    pin.setLatLng([lat, lng]);
+    $('#p-lat').value = lat.toFixed(5);
+    $('#p-lng').value = lng.toFixed(5);
+    if (zoom) pinMap.setView([lat, lng], zoom);
+  };
+  pin.on('dragend', () => { const p = pin.getLatLng(); setPin(p.lat, p.lng); });
+  pinMap.on('click', (e) => setPin(e.latlng.lat, e.latlng.lng));
+  ['#p-lat', '#p-lng'].forEach((sel) => $(sel).addEventListener('change', () => {
+    const lat = Number($('#p-lat').value); const lng = Number($('#p-lng').value);
+    if (lat && lng) setPin(lat, lng, 16);
+  }));
+  $('#p-locate').addEventListener('click', () => navigator.geolocation?.getCurrentPosition(
+    (pos) => setPin(pos.coords.latitude, pos.coords.longitude, 17),
+    () => toast('Could not get your location.'),
+  ));
   $('#profile-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const body = {

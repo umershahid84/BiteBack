@@ -4,6 +4,7 @@ const { HttpError, bad } = require('../errors');
 const { requireRole } = require('../auth');
 const { distanceMiles } = require('../geo');
 const { transaction } = require('../db');
+const { resolveArea } = require('../areas');
 
 const cardLabel = (c) => `${c.brand.toUpperCase()} •••• ${c.last4}`;
 
@@ -51,10 +52,13 @@ module.exports = function customerRoutes({ db, payments, orders, receipts }) {
   router.get('/offers', (req, res) => {
     const lat = v.coord(req.query.lat, 'Latitude', 90);
     const lng = v.coord(req.query.lng, 'Longitude', 180);
-    const origin = lat != null && lng != null ? { lat, lng } : null;
-    const radius = req.query.radius ? Number(req.query.radius) : null;
     const q = String(req.query.q || '').trim().toLowerCase();
     const area = String(req.query.area || '').trim().toLowerCase();
+    // A known city or ZIP ("Tacoma", "98198") searches around that place; the user's own
+    // location (lat/lng) is used otherwise.
+    const place = area ? resolveArea(area) : null;
+    const origin = place ? { lat: place.lat, lng: place.lng } : lat != null && lng != null ? { lat, lng } : null;
+    const radius = req.query.radius ? Number(req.query.radius) : place ? 10 : null;
     const dietary = String(req.query.dietary || '').trim().toLowerCase();
 
     let list = db.prepare(`
@@ -66,7 +70,7 @@ module.exports = function customerRoutes({ db, payments, orders, receipts }) {
     if (q) {
       list = list.filter((o) => [o.title, o.description, o.restaurant.name, o.restaurant.cuisine].join(' ').toLowerCase().includes(q));
     }
-    if (area) list = list.filter((o) => o.restaurant.city.toLowerCase().includes(area) || o.restaurant.zip.startsWith(area));
+    if (area && !place) list = list.filter((o) => o.restaurant.city.toLowerCase().includes(area) || o.restaurant.zip.startsWith(area));
     if (dietary) list = list.filter((o) => o.dietary.includes(dietary));
     if (origin && radius > 0) list = list.filter((o) => o.distanceMiles == null || o.distanceMiles <= radius);
 
@@ -78,7 +82,7 @@ module.exports = function customerRoutes({ db, payments, orders, receipts }) {
     };
     const sort = sorters[req.query.sort] ? req.query.sort : origin ? 'distance' : 'ending';
     list.sort(sorters[sort]);
-    res.json({ offers: list, sort });
+    res.json({ offers: list, sort, origin, place, radius });
   });
 
   router.get('/offers/:id', (req, res) => {
@@ -89,7 +93,7 @@ module.exports = function customerRoutes({ db, payments, orders, receipts }) {
   });
 
   router.post('/quote', (req, res) => {
-    const quantity = v.int(req.body?.quantity ?? 1, 'Quantity', { min: 1, max: 10 });
+    const quantity = v.int(req.body?.quantity ?? 1, 'Quantity', { min: 1, max: 500 });
     const { quote } = orders.quoteOffer(Number(req.body?.offerId), quantity);
     res.json({ quote });
   });
@@ -192,7 +196,7 @@ module.exports = function customerRoutes({ db, payments, orders, receipts }) {
   router.post('/orders', async (req, res) => {
     const body = req.body || {};
     const offerId = Number(body.offerId);
-    const quantity = v.int(body.quantity ?? 1, 'Quantity', { min: 1, max: 10 });
+    const quantity = v.int(body.quantity ?? 1, 'Quantity', { min: 1, max: 500 });
     orders.quoteOffer(offerId, quantity); // validate before touching the payment provider
 
     // Resolve which card to use.

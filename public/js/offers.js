@@ -16,7 +16,16 @@ const config = await getConfig();
 for (const tag of config.dietaryTags) $('#f-diet').insertAdjacentHTML('beforeend', `<option value="${esc(tag)}">${esc(tag[0].toUpperCase() + tag.slice(1))}</option>`);
 
 let offers = [];
+let lastSearch = null;
 let debounce;
+let view = 'list';
+try { view = sessionStorage.getItem('bb-view') === 'map' ? 'map' : 'list'; } catch { /* ignore */ }
+
+// City / ZIP suggestions for the area box.
+api('/auth/areas').then(({ cities, zips }) => {
+  $('#area-list').innerHTML = cities.map((c) => `<option value="${esc(c.name)}">${esc(c.county)} County</option>`).join('')
+    + zips.map((z) => `<option value="${z.zip}">${esc(z.city)}</option>`).join('');
+}).catch(() => {});
 
 async function load() {
   const params = new URLSearchParams();
@@ -28,12 +37,18 @@ async function load() {
   if (origin) {
     set('lat', origin.lat);
     set('lng', origin.lng);
-    set('radius', $('#f-radius').value);
   }
+  set('radius', $('#f-radius').value);
   try {
-    ({ offers } = await api(`/offers?${params}`));
+    const res = await api(`/offers?${params}`);
+    offers = res.offers;
+    lastSearch = res;
+    $('#area-note').textContent = res.place
+      ? `Showing deals within ${res.radius} miles of ${res.place.label}. Change the distance filter to widen the search.`
+      : '';
     showError(msg, null);
     render();
+    renderMap(params.toString());
   } catch (err) {
     showError(msg, err);
   }
@@ -114,6 +129,7 @@ async function openCheckout(offer) {
 
     <div class="row"><span class="section-label" style="margin:0">Quantity</span><span class="spacer"></span>
       <div class="qty"><button type="button" data-q="-1" aria-label="Fewer">−</button><span id="qty">1</span><button type="button" data-q="1" aria-label="More">+</button></div></div>
+    <div class="small muted" id="qty-note" style="text-align:right;margin-top:6px"></div>
 
     <div class="section-label">Order summary</div>
     <div class="summary-box"><table class="breakdown" id="breakdown"></table></div>
@@ -130,10 +146,16 @@ async function openCheckout(offer) {
 
   const body = modal.body;
   let quantity = 1;
-  const max = Math.min(offer.quantityAvailable, 10);
+  // The restaurant decides how many are available; customers can't order more than that.
+  const max = offer.quantityAvailable;
 
   async function refreshQuote() {
     $('#qty', body).textContent = quantity;
+    $('[data-q="-1"]', body).disabled = quantity <= 1;
+    $('[data-q="1"]', body).disabled = quantity >= max;
+    $('#qty-note', body).innerHTML = quantity >= max
+      ? `<span style="color:var(--accent-ink)">That's all ${max === 1 ? 'there is' : `${max} available`}. The restaurant set this limit.</span>`
+      : `${max} available`;
     try {
       const { quote: q } = await api('/quote', { method: 'POST', body: { offerId: offer.id, quantity } });
       $('#breakdown', body).innerHTML = `
@@ -215,4 +237,90 @@ function showConfirmation(modal, order, offer) {
   confetti();
 }
 
+// ---------- Map view ----------
+let map;
+let markers;
+let youMarker;
+let lastFitKey = null;
+
+function setView(v) {
+  view = v;
+  try { sessionStorage.setItem('bb-view', v); } catch { /* ignore */ }
+  document.querySelectorAll('.view-toggle button').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
+  $('#map-wrap').classList.toggle('hidden', v !== 'map');
+  grid.classList.toggle('hidden', v === 'map');
+  if (v === 'map') {
+    ensureMap();
+    setTimeout(() => { map.invalidateSize(); renderMap(null, true); }, 0);
+  }
+}
+document.querySelectorAll('.view-toggle button').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+
+function ensureMap() {
+  if (map) return;
+  const L = window.L;
+  map = L.map('map', { zoomControl: true, scrollWheelZoom: true, minZoom: 7, maxZoom: 18 }).setView([47.45, -122.3], 9);
+  L.tileLayer(config.map.tileUrl, { attribution: config.map.attribution, maxZoom: 19 }).addTo(map);
+  if (config.map.darkFilter) $('#map').classList.add('dark-tiles');
+  markers = L.layerGroup().addTo(map);
+  map.on('popupopen', (e) => {
+    e.popup.getElement().querySelectorAll('[data-open]').forEach((btn) => btn.addEventListener('click', () => {
+      map.closePopup();
+      openCheckout(offers.find((o) => o.id === Number(btn.dataset.open)));
+    }));
+  });
+}
+
+function renderMap(searchKey, forceFit = false) {
+  if (!map || view !== 'map') return;
+  const L = window.L;
+  markers.clearLayers();
+  // One pin per restaurant, listing all of its deals.
+  const byRestaurant = new Map();
+  for (const o of offers) {
+    if (o.restaurant.lat == null || o.restaurant.lng == null) continue;
+    if (!byRestaurant.has(o.restaurant.id)) byRestaurant.set(o.restaurant.id, { r: o.restaurant, list: [] });
+    byRestaurant.get(o.restaurant.id).list.push(o);
+  }
+  const points = [];
+  for (const { r, list } of byRestaurant.values()) {
+    const best = Math.max(...list.map((o) => o.discountPct));
+    const icon = L.divIcon({
+      className: 'map-pin-wrap',
+      html: `<div class="map-pin"><span>${cuisineEmoji(r.cuisine)}</span><b>-${best}%</b>${list.length > 1 ? `<i>${list.length}</i>` : ''}</div>`,
+      iconSize: [74, 34], iconAnchor: [37, 40], popupAnchor: [0, -38],
+    });
+    const html = `
+      <div class="map-popup">
+        <div class="mp-head"><b>${esc(r.name)}</b><span>${esc(r.cuisine || '')}${r.cuisine ? ' · ' : ''}${esc(r.city)}</span>
+          <small>${esc(r.address)}, ${esc(r.city)} ${esc(r.zip)}</small></div>
+        ${list.map((o) => `
+        <div class="mp-offer">
+          ${o.imageUrl ? `<img src="${esc(o.imageUrl)}" alt="">` : `<div class="mp-emoji">${cuisineEmoji(r.cuisine)}</div>`}
+          <div class="mp-info"><b>${esc(o.title)}</b>
+            <div><span class="mp-price">${money(o.priceCents)}</span> <s>${money(o.originalPriceCents)}</s> <span class="mp-off">-${o.discountPct}%</span></div>
+            <small>${o.quantityAvailable} left · until ${fmtTime(o.pickupEnd)}${o.distanceMiles != null ? ` · ${o.distanceMiles} mi` : ''}</small></div>
+          <button class="btn btn-primary btn-sm" data-open="${o.id}">View</button>
+        </div>`).join('')}
+      </div>`;
+    L.marker([r.lat, r.lng], { icon, title: r.name, riseOnHover: true }).bindPopup(html, { maxWidth: 340, minWidth: 260 }).addTo(markers);
+    points.push([r.lat, r.lng]);
+  }
+  if (youMarker) youMarker.remove();
+  const center = lastSearch?.origin;
+  if (center) {
+    youMarker = L.circleMarker([center.lat, center.lng], { radius: 8, color: '#fff', weight: 3, fillColor: '#3b82f6', fillOpacity: 1 })
+      .bindTooltip(lastSearch.place ? lastSearch.place.label : 'You are here').addTo(map);
+  }
+  // Re-fit only when the search changes, so zooming and panning aren't undone by refreshes.
+  const fitKey = searchKey ?? lastFitKey;
+  if (forceFit || fitKey !== lastFitKey) {
+    lastFitKey = fitKey;
+    const all = center ? [...points, [center.lat, center.lng]] : points;
+    if (all.length > 1) map.fitBounds(all, { padding: [40, 40], maxZoom: 14 });
+    else if (all.length === 1) map.setView(all[0], 13);
+  }
+}
+
+setView(view);
 load();

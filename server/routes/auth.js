@@ -3,6 +3,7 @@ const v = require('../validate');
 const { hashPassword, verifyPassword, createLimiter } = require('../auth');
 const { HttpError } = require('../errors');
 const { transaction } = require('../db');
+const { lookupZip, listAreas } = require('../areas');
 
 module.exports = function authRoutes({ db, config, sessions, payments }) {
   const router = express.Router();
@@ -37,6 +38,9 @@ module.exports = function authRoutes({ db, config, sessions, payments }) {
         lat: v.coord(r.lat, 'Latitude', 90),
         lng: v.coord(r.lng, 'Longitude', 180),
       };
+      // Until the owner pins the exact spot, place the restaurant at its ZIP code's center.
+      const z = lookupZip(restaurant.zip);
+      if ((restaurant.lat == null || restaurant.lng == null) && z) Object.assign(restaurant, { lat: z.lat, lng: z.lng });
     }
 
     if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) throw new HttpError(409, 'An account with this email already exists.');
@@ -90,8 +94,14 @@ module.exports = function authRoutes({ db, config, sessions, payments }) {
       stripePublishableKey: payments.mode === 'stripe' ? config.stripePublishableKey : null,
       serviceFeeBps: config.serviceFeeBps,
       reasons: v.OFFER_REASONS,
+      map: { tileUrl: config.mapTileUrl, attribution: config.mapAttribution, darkFilter: config.mapDarkFilter },
       dietaryTags: v.DIETARY_TAGS,
     });
+  });
+
+  router.get('/areas', (_req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.json(listAreas());
   });
 
   return router;
