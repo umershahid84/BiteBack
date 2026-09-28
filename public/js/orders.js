@@ -1,4 +1,4 @@
-import { api, $, esc, money, fmtDateTime, fmtTime, renderHeader, requireRole, showError, toast, pinTiles } from './common.js';
+import { api, $, esc, money, fmtDateTime, fmtTime, countdown, renderHeader, requireRole, showError, toast, pinTiles } from './common.js';
 
 await requireRole('customer');
 renderHeader('orders');
@@ -37,7 +37,7 @@ function render(orders) {
           <span class="status ${o.status}">${LABELS[o.status] || esc(o.status)}</span>
           <h3 style="margin:8px 0 2px">${o.quantity} × ${esc(o.itemTitle)}</h3>
           <div class="muted small">${esc(r.name)} · ${esc(r.address)}, ${esc(r.city)} · Ordered ${fmtDateTime(o.createdAt)}</div>
-          ${o.status === 'reserved' ? `<div class="small" style="margin-top:6px">🕒 Pick up by <b>${fmtTime(o.pickupEnd)}</b></div>` : ''}
+          ${o.status === 'reserved' ? `<div class="small" style="margin-top:6px">Pick up by <b>${fmtTime(o.pickupEnd)}</b> · ${countdown(o.pickupEnd)}</div>` : ''}
           <div class="small" style="margin-top:8px">${o.quantity} × <span class="was">${money(o.originalUnitPriceCents)}</span> <b>${money(o.unitPriceCents)}</b>
             <span class="chip diet" style="margin-left:4px">-${o.discountPct}%</span> · Total <b>${money(o.totalCents)}</b></div>
           <div class="row" style="margin-top:10px;gap:8px">

@@ -1,4 +1,4 @@
-import { api, $, $$, esc, money, pct, fmtWindow, fmtDateTime, fmtTime, renderHeader, requireRole, showError, openModal, withBusy, toast } from './common.js';
+import { api, $, $$, esc, money, pct, fmtDateTime, fmtTime, timeLeft, countdown, renderHeader, requireRole, showError, openModal, withBusy, toast } from './common.js';
 import { getConfig } from './cards.js';
 import { ringBell, unlockOnInteraction, isUnlocked } from './bell.js';
 
@@ -113,10 +113,18 @@ function renderPickup(panel) {
 }
 
 // ---------- Offers ----------
-const toLocalInput = (d) => {
-  const off = d.getTimezoneOffset() * 60000;
-  return new Date(d - off).toISOString().slice(0, 16);
-};
+
+function timerCell(o) {
+  const expired = Date.parse(o.pickup_end) <= Date.now();
+  if (expired) {
+    return `<span class="countdown expired">⌛ Expired ${esc(fmtTime(o.pickup_end))}</span>
+      ${o.quantity_available ? `<div class="discard-note">🗑️ Discard ${o.quantity_available} unsold</div>` : '<div class="muted">All sold 🎉</div>'}`;
+  }
+  if (o.status === 'ended') return `<span class="muted">Ended early</span>${o.quantity_available ? `<div class="discard-note">🗑️ Discard ${o.quantity_available} unsold</div>` : ''}`;
+  return `${countdown(o.pickup_end)}<div class="muted">discard at ${esc(fmtTime(o.pickup_end))}</div>
+    <div class="row" style="gap:6px;margin-top:6px"><button class="btn btn-ghost btn-sm" data-extend="30" data-id="${o.id}">+30m</button>
+    <button class="btn btn-ghost btn-sm" data-extend="60" data-id="${o.id}">+1h</button></div>`;
+}
 
 async function renderOffers(panel) {
   const { offers } = await api('/restaurant/offers');
@@ -128,14 +136,14 @@ async function renderOffers(panel) {
     return;
   }
   panel.innerHTML = `<div class="card table-wrap" style="padding:8px"><table class="data">
-    <thead><tr><th>Item</th><th>Price</th><th>Left</th><th>Pickup window</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Item</th><th>Price</th><th>Left</th><th>Discard timer</th><th>Status</th><th></th></tr></thead>
     <tbody>${offers.map((o) => {
       const price = Math.floor((o.original_price_cents * (100 - o.discount_pct)) / 100 + 0.5);
       return `<tr>
         <td><div class="row" style="flex-wrap:nowrap;gap:12px">${o.image_path ? `<img class="thumb sm" src="${esc(o.image_path)}" alt="">` : ''}<div><b>${esc(o.title)}</b><div class="small muted">${esc(config.reasons[o.reason])}${o.awaiting_pickup ? ` · ${o.awaiting_pickup} awaiting pickup` : ''}${o.picked_up ? ` · ${o.picked_up} picked up` : ''}</div></div></div></td>
         <td>${money(price)} <span class="was small">${money(o.original_price_cents)}</span><div class="small muted">${o.discount_pct}% off</div></td>
         <td>${o.quantity_available} / ${o.quantity_total}</td>
-        <td class="small">${fmtWindow(o.pickup_start, o.pickup_end)}</td>
+        <td class="small">${timerCell(o)}</td>
         <td><span class="status ${o.status}">${o.status}</span></td>
         <td style="white-space:nowrap">${o.status === 'ended' ? '' : `
           <button class="btn btn-ghost btn-sm" data-edit="${o.id}">Edit</button>
@@ -143,7 +151,19 @@ async function renderOffers(panel) {
           <button class="btn btn-danger btn-sm" data-status="ended" data-id="${o.id}">End</button>`}</td>
       </tr>`;
     }).join('')}</tbody></table></div>`;
+  panel.addEventListener('expired', () => setTimeout(() => currentTab === 'offers' && renderOffers(panel), 1500), { once: true });
   panel.onclick = async (e) => {
+    const extend = e.target.closest('[data-extend]');
+    if (extend) {
+      try {
+        await api(`/restaurant/offers/${extend.dataset.id}/extend`, { method: 'POST', body: { minutes: Number(extend.dataset.extend) } });
+        toast(`Timer extended by ${extend.dataset.extend >= 60 ? `${extend.dataset.extend / 60} hour` : `${extend.dataset.extend} min`}`);
+        renderOffers(panel);
+      } catch (err) {
+        toast(err.message);
+      }
+      return;
+    }
     const edit = e.target.closest('[data-edit]');
     const st = e.target.closest('[data-status]');
     if (edit) offerForm(offers.find((o) => o.id === Number(edit.dataset.edit)));
@@ -177,8 +197,7 @@ async function offerForm(existing, preselectId) {
     return;
   }
   const now = new Date();
-  const start = existing ? new Date(existing.pickup_start) : now;
-  const end = existing ? new Date(existing.pickup_end) : new Date(now.getTime() + 3 * 3600000);
+  const running = existing && Date.parse(existing.pickup_end) > now.getTime();
   const selectedId = existing?.menu_item_id ?? preselectId ?? menu[0].id;
   const modal = openModal(existing ? 'Edit offer' : 'Post surplus food', `
     <form id="offer-form" novalidate>
@@ -195,10 +214,17 @@ async function offerForm(existing, preselectId) {
         <div class="field"><label for="o-qty">Quantity available</label><input id="o-qty" type="number" min="1" max="500" value="${existing?.quantity_total ?? 1}"></div>
       </div>
       <div class="alert alert-info small" id="o-preview"></div>
-      <div class="grid-2">
-        <div class="field"><label for="o-start">Pickup from</label><input id="o-start" type="datetime-local" value="${toLocalInput(start)}"></div>
-        <div class="field"><label for="o-end">Pickup until</label><input id="o-end" type="datetime-local" value="${toLocalInput(end)}"></div>
-      </div>
+      <div class="field"><label>⏳ Discard timer</label>
+        <div class="timer-chips" id="o-timer">
+          ${running ? `<button type="button" data-min="keep" class="on">Keep current (${esc(timeLeft(existing.pickup_end))})</button>` : ''}
+          ${[[30, '30 min'], [60, '1 hour'], [90, '1½ hours'], [120, '2 hours'], [180, '3 hours'], [240, '4 hours']]
+            .map(([m, l]) => `<button type="button" data-min="${m}" class="${!running && m === 120 ? 'on' : ''}">${l}</button>`).join('')}
+          <button type="button" data-min="custom">Custom</button>
+        </div>
+        <div class="timer-custom hidden" id="o-custom">
+          <input id="o-custom-min" type="number" min="5" max="4320" step="5" value="45" aria-label="Minutes"> <span class="muted">minutes</span>
+        </div>
+        <div class="hint" id="o-timer-note"></div></div>
       <div id="o-msg"></div>
       <button class="btn btn-primary btn-block" type="submit">${existing ? 'Save changes' : 'Post offer'}</button>
     </form>`);
@@ -215,6 +241,27 @@ async function offerForm(existing, preselectId) {
       ? `Customers pay <b>${money(Math.floor((item.price_cents * (100 - disc)) / 100 + 0.5))}</b> <span class="was">${money(item.price_cents)}</span> per item, plus ${pct(config.serviceFeeBps)} BiteBack service fee and ${pct(restaurant.tax_rate_bps)} sales tax.`
       : 'Enter a discount from 1% to 90%.';
   };
+  // Discard timer
+  let timer = running ? 'keep' : '120';
+  const timerMinutes = () => (timer === 'keep' ? null : timer === 'custom' ? Number($('#o-custom-min', b).value) : Number(timer));
+  const timerNote = () => {
+    const mins = timerMinutes();
+    const endsAt = mins == null ? new Date(existing.pickup_end) : new Date(Date.now() + mins * 60000);
+    $('#o-timer-note', b).innerHTML = mins != null && !(mins >= 5 && mins <= 4320)
+      ? 'Enter 5 to 4320 minutes.'
+      : `Available now until <b>${fmtTime(endsAt.toISOString())}</b>. Customers see a live countdown; when it ends, the offer disappears and anything unsold can be discarded.`;
+  };
+  $('#o-timer', b).addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-min]');
+    if (!btn) return;
+    timer = btn.dataset.min;
+    $$('#o-timer button', b).forEach((x) => x.classList.toggle('on', x === btn));
+    $('#o-custom', b).classList.toggle('hidden', timer !== 'custom');
+    timerNote();
+  });
+  $('#o-custom-min', b).addEventListener('input', timerNote);
+  timerNote();
+
   b.addEventListener('input', preview);
   b.addEventListener('change', preview);
   preview();
@@ -224,9 +271,8 @@ async function offerForm(existing, preselectId) {
     const body = {
       menuItemId: Number($('#o-item', b).value), description: $('#o-desc', b).value, reason: $('#o-reason', b).value,
       discountPct: $('#o-disc', b).value, quantity: $('#o-qty', b).value,
-      pickupStart: $('#o-start', b).value ? new Date($('#o-start', b).value).toISOString() : '',
-      pickupEnd: $('#o-end', b).value ? new Date($('#o-end', b).value).toISOString() : '',
     };
+    if (timerMinutes() != null) body.expiresInMinutes = timerMinutes();
     withBusy($('button[type=submit]', b), async () => {
       try {
         if (existing) await api(`/restaurant/offers/${existing.id}`, { method: 'PUT', body });

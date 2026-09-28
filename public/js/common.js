@@ -162,3 +162,37 @@ const CUISINE_HUE = { seafood: 200, salvadoran: 45, bbq: 15, vietnamese: 28, bak
 export const cuisineHue = (c) => CUISINE_HUE[String(c || '').toLowerCase()] ?? 150;
 
 export const pinTiles = (pin, cls = '') => `<div class="pin-tiles ${cls}" role="img" aria-label="PIN ${esc(pin.split('').join(' '))}">${pin.split('').map((d) => `<span>${esc(d)}</span>`).join('')}</div>`;
+
+// ----- Discard-timer countdowns -----
+// Any element with data-countdown="<ISO time>" shows the time left and updates every second.
+// It gets class "soon" under 15 minutes and "expired" once the timer runs out.
+export function timeLeft(iso, now = Date.now()) {
+  const ms = Date.parse(iso) - now;
+  if (ms <= 0) return 'Expired';
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h`;
+  if (h) return `${h}h ${String(m).padStart(2, '0')}m`;
+  if (m >= 10) return `${m}m`;
+  return `${m}:${String(s % 60).padStart(2, '0')}`;
+}
+
+export const countdown = (iso, { prefix = '⏳', suffix = ' left' } = {}) =>
+  `<span class="countdown" data-countdown="${esc(iso)}" data-prefix="${esc(prefix)}" data-suffix="${esc(suffix)}">${prefix} ${timeLeft(iso)}${suffix}</span>`;
+
+function tickCountdowns() {
+  const now = Date.now();
+  for (const el of document.querySelectorAll('[data-countdown]')) {
+    const ms = Date.parse(el.dataset.countdown) - now;
+    const expired = ms <= 0;
+    el.textContent = expired ? '⌛ Expired' : `${el.dataset.prefix} ${timeLeft(el.dataset.countdown, now)}${el.dataset.suffix}`;
+    el.classList.toggle('soon', !expired && ms < 15 * 60000);
+    el.classList.toggle('expired', expired);
+    if (expired && !el.dataset.fired) {
+      el.dataset.fired = '1';
+      el.dispatchEvent(new CustomEvent('expired', { bubbles: true }));
+    }
+  }
+}
+setInterval(tickCountdowns, 1000);

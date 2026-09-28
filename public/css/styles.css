@@ -426,3 +426,17 @@ table.data tbody tr:hover { background: color-mix(in srgb, var(--surface-2) 60%,
 .toast { z-index: 2100; }
 .pin-map, .pin-map.leaflet-container { background: #0c1712; }
 .qty button:disabled { opacity: .35; cursor: not-allowed; }
+
+/* ---------- Discard-timer countdowns ---------- */
+.countdown { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--primary-ink); white-space: nowrap; }
+.countdown.soon { color: var(--accent-ink); animation: pulse 1.6s ease-in-out infinite; }
+.countdown.expired { color: var(--danger); animation: none; }
+@keyframes pulse { 50% { opacity: .55; } }
+.timer-pill { position: absolute; bottom: 10px; left: 12px; z-index: 1; background: rgba(7, 17, 13, .78); backdrop-filter: blur(6px); padding: 4px 10px; border-radius: 999px; font-size: .8rem; }
+.offer.is-expired { opacity: .45; filter: grayscale(.7); }
+.timer-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.timer-chips button { border: 1.5px solid var(--line); background: var(--surface-2); color: var(--ink); font: 700 .88rem var(--font-body); padding: 9px 14px; border-radius: 999px; cursor: pointer; }
+.timer-chips button.on { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-ink); }
+.timer-custom { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.timer-custom input { width: 110px; }
+.discard-note { color: var(--danger); font-weight: 700; font-size: .8rem; }

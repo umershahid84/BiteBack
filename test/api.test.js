@@ -418,3 +418,45 @@ test('quantity is limited only by what the restaurant made available; area searc
     assert.ok(areas.cities.some((x) => x.name === city), city);
   }
 });
+
+test('restaurant sets a discard timer; it can be extended; offer disappears when it runs out', async (t) => {
+  const env = await setup();
+  t.after(() => env.server.close());
+  const shop = env.client();
+  await shop('/auth/signup', { method: 'POST', body: {
+    role: 'restaurant', email: 'o@example.com', username: 'shop', password: 'secret123',
+    restaurant: { name: 'Shop', address: '1 Main St', city: 'Kent', zip: '98032' },
+  } });
+  const item = await menuItem(shop, 'Teriyaki', 13);
+  let r = await shop('/restaurant/offers', { method: 'POST', body: { menuItemId: item, reason: 'overproduction', discountPct: 40, quantity: 3 } });
+  assert.equal(r.status, 400, 'timer required');
+  r = await shop('/restaurant/offers', { method: 'POST', body: { menuItemId: item, reason: 'overproduction', discountPct: 40, quantity: 3, expiresInMinutes: 2 } });
+  assert.equal(r.status, 400, 'at least 5 minutes');
+
+  const before = Date.now();
+  r = await shop('/restaurant/offers', { method: 'POST', body: { menuItemId: item, reason: 'overproduction', discountPct: 40, quantity: 3, expiresInMinutes: 90 } });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const offer = r.body.offer;
+  const mins = (Date.parse(offer.pickup_end) - before) / 60000;
+  assert.ok(mins > 89.9 && mins < 90.1, `ends in ~90 min, got ${mins}`);
+  assert.ok(Date.parse(offer.pickup_start) <= Date.now(), 'available immediately');
+
+  r = await shop(`/restaurant/offers/${offer.id}/extend`, { method: 'POST', body: { minutes: 30 } });
+  assert.equal(Date.parse(r.body.offer.pickup_end) - Date.parse(offer.pickup_end), 30 * 60000);
+
+  // Editing without touching the timer keeps it.
+  r = await shop(`/restaurant/offers/${offer.id}`, { method: 'PUT', body: { menuItemId: item, reason: 'overproduction', discountPct: 50, quantity: 3 } });
+  assert.equal(r.status, 200);
+  assert.equal(Date.parse(r.body.offer.pickup_end) - Date.parse(offer.pickup_end), 30 * 60000);
+
+  const c = env.client();
+  await c('/auth/signup', { method: 'POST', body: { email: 'c@example.com', username: 'cust', password: 'password1' } });
+  r = await c('/offers');
+  assert.equal(r.body.offers.length, 1);
+
+  await env.orders.sweep(new Date(Date.now() + 3 * 3600000));
+  r = await c('/offers');
+  assert.equal(r.body.offers.length, 0, 'gone after the timer');
+  r = await shop(`/restaurant/offers/${offer.id}/extend`, { method: 'POST', body: { minutes: 30 } });
+  assert.equal(r.status, 409, 'cannot extend an ended offer');
+});

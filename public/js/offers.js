@@ -1,4 +1,4 @@
-import { api, $, esc, money, pct, fmtWindow, fmtTime, renderHeader, requireRole, showError, openModal, withBusy, cuisineEmoji, cuisineHue, pinTiles } from './common.js';
+import { api, $, esc, money, pct, fmtTime, countdown, renderHeader, requireRole, showError, openModal, withBusy, cuisineEmoji, cuisineHue, pinTiles } from './common.js';
 import { confetti } from './confetti.js';
 import { createCardEntry, cardText, getConfig } from './cards.js';
 
@@ -67,12 +67,13 @@ function render() {
         : `<span class="emoji" aria-hidden="true">${cuisineEmoji(o.restaurant.cuisine)}</span>`}
         <span class="badge-off">-${o.discountPct}%</span>
         <span class="badge-left ${o.quantityAvailable <= 2 ? 'low' : ''}">${o.quantityAvailable} left</span>
+        <span class="timer-pill">${countdown(o.pickupEnd)}</span>
       </div>
       <div class="offer-body">
         <h3>${esc(o.title)}</h3>
         <div class="offer-rest">${esc(o.restaurant.name)} · ${esc(o.restaurant.city)}</div>
         <div class="offer-meta">
-          <span>🕒 ${fmtWindow(o.pickupStart, o.pickupEnd)}</span>
+          <span>🕒 Pick up by ${fmtTime(o.pickupEnd)}</span>
           ${o.distanceMiles != null ? `<span>📍 ${o.distanceMiles} mi</span>` : ''}
         </div>
         <div class="chips"><span class="chip reason">${esc(o.reasonLabel)}</span>${o.dietary.map((d) => `<span class="chip diet">${esc(d)}</span>`).join('')}</div>
@@ -81,6 +82,15 @@ function render() {
       </div>
     </article>`).join('');
 }
+
+// When a deal's timer runs out while the page is open, grey it out.
+grid.addEventListener('expired', (e) => {
+  const card = e.target.closest('.offer');
+  if (!card) return;
+  card.classList.add('is-expired');
+  const btn = card.querySelector('button[data-id]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Expired'; }
+});
 
 grid.addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-id]');
@@ -125,7 +135,8 @@ async function openCheckout(offer) {
     ${offer.description ? `<p>${esc(offer.description)}</p>` : ''}
     <div class="chips" style="margin-bottom:10px"><span class="chip reason">Why it's discounted: ${esc(offer.reasonLabel)}</span>
       ${offer.dietary.map((d) => `<span class="chip diet">${esc(d)}</span>`).join('')}</div>
-    <div class="alert alert-warn small">🕒 Pick up <b>${fmtWindow(offer.pickupStart, offer.pickupEnd)}</b>. Orders not picked up by then are released and not charged.</div>
+    <div class="alert alert-warn small">${countdown(offer.pickupEnd, { suffix: ' until this food is discarded' })}<br>
+      Pick up by <b>${fmtTime(offer.pickupEnd)}</b>. If you don't make it, your order is released and you're not charged.</div>
 
     <div class="row"><span class="section-label" style="margin:0">Quantity</span><span class="spacer"></span>
       <div class="qty"><button type="button" data-q="-1" aria-label="Fewer">−</button><span id="qty">1</span><button type="button" data-q="1" aria-label="More">+</button></div></div>
@@ -226,7 +237,7 @@ function showConfirmation(modal, order, offer) {
       <div class="details">
         <b>${order.quantity} × ${esc(order.itemTitle)}</b><br>
         <span class="muted">${esc(r.name)} · ${esc(r.address)}, ${esc(r.city)}</span><br>
-        🕒 Pick up by <b>${fmtTime(order.pickupEnd)}</b><br>
+        Pick up by <b>${fmtTime(order.pickupEnd)}</b> · ${countdown(order.pickupEnd)}<br>
         💳 ${esc(order.cardLabel)} will be charged <b>${money(order.totalCents)}</b> only when the restaurant enters your PIN.
       </div>
       <div class="row" style="justify-content:center;margin-top:18px">
@@ -299,7 +310,7 @@ function renderMap(searchKey, forceFit = false) {
           ${o.imageUrl ? `<img src="${esc(o.imageUrl)}" alt="">` : `<div class="mp-emoji">${cuisineEmoji(r.cuisine)}</div>`}
           <div class="mp-info"><b>${esc(o.title)}</b>
             <div><span class="mp-price">${money(o.priceCents)}</span> <s>${money(o.originalPriceCents)}</s> <span class="mp-off">-${o.discountPct}%</span></div>
-            <small>${o.quantityAvailable} left · until ${fmtTime(o.pickupEnd)}${o.distanceMiles != null ? ` · ${o.distanceMiles} mi` : ''}</small></div>
+            <small>${o.quantityAvailable} left · ${countdown(o.pickupEnd, { prefix: '⏳', suffix: '' })}${o.distanceMiles != null ? ` · ${o.distanceMiles} mi` : ''}</small></div>
           <button class="btn btn-primary btn-sm" data-open="${o.id}">View</button>
         </div>`).join('')}
       </div>`;

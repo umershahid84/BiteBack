@@ -26,6 +26,7 @@ module.exports = {
   sessionDays: 30,
   // Unpaid checkouts (e.g. waiting on 3-D Secure) are released after this many minutes.
   pendingPaymentMinutes: 15,
-  // Reserved orders not picked up this many minutes after the pickup window closes are released.
-  pickupGraceMinutes: 30,
+  // When an offer's discard timer runs out, orders not yet picked up are released (never charged)
+  // after this short grace period, for customers already at the counter.
+  pickupGraceMinutes: 10,
 };
