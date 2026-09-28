@@ -6,7 +6,8 @@ const { transaction } = require('./db');
 const { quote } = require('./pricing');
 const { HttpError, bad } = require('./errors');
 
-const MAX_PER_ORDER = 10;
+// Customers can order up to whatever the restaurant has left; this is only a sanity cap.
+const MAX_PER_ORDER = 500;
 
 function createOrderService({ db, config, payments }) {
   const nowIso = () => new Date().toISOString();
@@ -36,9 +37,11 @@ function createOrderService({ db, config, payments }) {
 
   function assertOrderable(offer, quantity) {
     if (!offer || offer.status !== 'active' || offer.pickup_end <= nowIso()) throw new HttpError(404, 'This offer is no longer available.');
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_PER_ORDER) throw bad(`Quantity must be between 1 and ${MAX_PER_ORDER}.`);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_PER_ORDER) throw bad('Please choose a valid quantity.');
     if (quantity > offer.quantity_available) {
-      throw new HttpError(409, offer.quantity_available ? `Only ${offer.quantity_available} left.` : 'Sold out.');
+      throw new HttpError(409, offer.quantity_available
+        ? `Only ${offer.quantity_available} available. The restaurant set that limit, so you can't order more.`
+        : 'Sold out.');
     }
   }
 

@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "express": "^5.2.1",
+    "leaflet": "^1.9.4",
     "pdfkit": "^0.20.2",
     "stripe": "^22.0.0"
   }

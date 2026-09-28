@@ -7,6 +7,7 @@ const path = require('node:path');
 const config = require('./config');
 const { openDatabase, transaction } = require('./db');
 const { hashPassword } = require('./auth');
+const { lookupZip } = require('./areas');
 
 const DEMO_PASSWORD = 'BiteBack123';
 
@@ -18,6 +19,61 @@ const RESTAURANTS = [
   { user: 'bellevuecurry', name: 'Bellevue Curry Kitchen', cuisine: 'Indian', address: '10500 NE 8th St', city: 'Bellevue', zip: '98004', lat: 47.6170, lng: -122.2015, tax: 1030 },
   { user: 'redmondpoke', name: 'Redmond Poke Shack', cuisine: 'Hawaiian', address: '16500 NE 74th St', city: 'Redmond', zip: '98052', lat: 47.6710, lng: -122.1180, tax: 1030 },
   { user: 'kirklandsushi', name: 'Kirkland Sushi Bar', cuisine: 'Japanese', address: '120 Park Ln', city: 'Kirkland', zip: '98033', lat: 47.6760, lng: -122.2060, tax: 1030 },
+];
+
+// More demo restaurants around the region (all fictional). Pins start near the ZIP code's
+// center; owners can drag their pin to the exact spot in the portal.
+const REGIONAL = [
+  ['desmoinesfish', 'Marina Fish & Chips', 'Seafood', '22300 Marine View Dr S', 'Des Moines', '98198'],
+  ['kentteriyaki', 'Kent Station Teriyaki', 'Japanese', '417 Ramsay Way', 'Kent', '98032'],
+  ['kentpupusas', 'El Comal Pupuseria', 'Salvadoran', '25600 104th Ave SE', 'Kent', '98030'],
+  ['fedwaykbbq', 'Federal Way K-BBQ House', 'Korean', '31500 Pacific Hwy S', 'Federal Way', '98003'],
+  ['fedwaybakery', 'Twin Lakes Bakery', 'Bakery', '2100 SW 336th St', 'Federal Way', '98023'],
+  ['tacomathai', '6th Ave Thai Kitchen', 'Thai', '2700 6th Ave', 'Tacoma', '98406'],
+  ['tacomaburger', 'Stadium Burger Co.', 'Burgers', '400 N Tacoma Ave', 'Tacoma', '98403'],
+  ['tacomatamales', 'Hilltop Tamaleria', 'Mexican', '1100 MLK Jr Way', 'Tacoma', '98405'],
+  ['fifepho', 'Fife Pho & Grill', 'Vietnamese', '5400 Pacific Hwy E', 'Fife', '98424'],
+  ['olympiacafe', 'Capitol Lake Cafe', 'Cafe', '500 Capitol Way S', 'Olympia', '98501'],
+  ['olympiapizza', 'Olympia Brick Oven', 'Pizza', '3500 Pacific Ave SE', 'Olympia', '98501'],
+  ['laceycurry', 'Lacey Spice Route', 'Indian', '5800 Martin Way E', 'Lacey', '98516'],
+  ['puyallupdeli', 'Meridian Deli', 'American', '300 S Meridian', 'Puyallup', '98371'],
+  ['auburnnoodle', 'Main Street Noodle Bar', 'Chinese', '200 E Main St', 'Auburn', '98002'],
+  ['rentontacos', 'Renton Landing Tacos', 'Mexican', '800 N 10th St', 'Renton', '98057'],
+  ['burienmed', 'Burien Mediterranean Grill', 'Mediterranean', '15100 Ambaum Blvd SW', 'Burien', '98166'],
+  ['tukwilasushi', 'Southcenter Sushi', 'Japanese', '17000 Southcenter Pkwy', 'Tukwila', '98188'],
+  ['lakewoodsoul', 'Lakewood Soul Kitchen', 'American', '6100 Mt Tacoma Dr SW', 'Lakewood', '98499'],
+  ['everettbbq', 'Everett Waterfront BBQ', 'BBQ', '1700 W Marine View Dr', 'Everett', '98201'],
+  ['lynnwoodgreens', 'Alderwood Greens', 'Salad', '3000 184th St SW', 'Lynnwood', '98037'],
+  ['bremertonchowder', 'Ferry Dock Chowder', 'Seafood', '200 Washington Ave', 'Bremerton', '98337'],
+  ['issaquahbakehouse', 'Front Street Bakehouse', 'Bakery', '100 Front St N', 'Issaquah', '98027'],
+];
+
+// [restaurant user, dish, description, dietary, price, reason, discount %, qty]
+const REGIONAL_MENU = [
+  ['desmoinesfish', 'Halibut Fish & Chips', 'Beer-battered halibut, fries and slaw.', '', 18.5, 'wrong_order', 45, 3],
+  ['desmoinesfish', 'Clam Chowder Bowl', 'New England style with oyster crackers.', 'gluten-free', 9, 'end_of_day', 50, 6],
+  ['kentteriyaki', 'Chicken Teriyaki Plate', 'Grilled chicken, rice and salad.', 'dairy-free', 13.5, 'overproduction', 40, 8],
+  ['kentpupusas', 'Pupusa Combo (3)', 'Cheese, bean and revuelta pupusas with curtido.', 'gluten-free', 12, 'unclaimed_order', 50, 2],
+  ['fedwaykbbq', 'Bulgogi Lunch Box', 'Marinated beef, rice and banchan.', 'dairy-free', 17, 'delayed_order', 45, 2],
+  ['fedwaybakery', 'Pastry Rescue Box', "Today's croissants, danishes and muffins.", 'vegetarian', 20, 'end_of_day', 60, 5],
+  ['tacomathai', 'Pad Thai with Chicken', 'Rice noodles, egg, peanuts and lime.', 'dairy-free', 15, 'wrong_order', 50, 1],
+  ['tacomathai', 'Green Curry with Tofu', 'Coconut green curry with jasmine rice.', 'vegan,gluten-free', 14, 'overproduction', 40, 4],
+  ['tacomaburger', 'Double Smash Burger + Fries', 'Two patties, cheese and house sauce.', '', 16, 'unclaimed_order', 50, 2],
+  ['tacomatamales', 'Pork Tamales (half dozen)', 'Red chile pork tamales.', 'gluten-free', 18, 'end_of_day', 45, 4],
+  ['fifepho', 'Brisket Pho', 'Slow-simmered broth with brisket and herbs.', 'dairy-free', 14.5, 'delayed_order', 40, 3],
+  ['olympiacafe', 'Sandwich & Soup Combo', "Half sandwich and today's soup.", 'vegetarian', 13, 'end_of_day', 50, 5],
+  ['olympiapizza', 'Wood-Fired Pepperoni Pizza', '12-inch pizza from our brick oven.', '', 19, 'unclaimed_order', 55, 1],
+  ['laceycurry', 'Butter Chicken + Naan', 'Creamy tomato curry with garlic naan.', '', 17, 'overproduction', 45, 6],
+  ['puyallupdeli', 'Turkey Club Sandwich', 'Roast turkey, bacon, lettuce and tomato on sourdough.', '', 12.5, 'wrong_order', 40, 2],
+  ['auburnnoodle', 'Beef Chow Fun', 'Wok-tossed wide rice noodles with beef.', 'dairy-free', 14, 'delayed_order', 50, 2],
+  ['rentontacos', 'Al Pastor Taco Plate', 'Four tacos with rice and beans.', 'gluten-free', 13, 'end_of_day', 45, 4],
+  ['burienmed', 'Chicken Shawarma Plate', 'Rice, salad, hummus and garlic sauce.', 'halal', 16, 'overproduction', 50, 5],
+  ['tukwilasushi', 'Salmon Poke Bowl', 'Salmon, avocado and cucumber over rice.', 'dairy-free', 17, 'wrong_order', 45, 1],
+  ['lakewoodsoul', 'Fried Chicken Dinner', 'Three pieces, mac & cheese and greens.', '', 18, 'unclaimed_order', 50, 2],
+  ['everettbbq', 'Brisket Sandwich + Side', 'Smoked brisket on a brioche bun.', '', 16.5, 'end_of_day', 40, 6],
+  ['lynnwoodgreens', 'Harvest Grain Bowl', 'Farro, roasted squash, kale and tahini.', 'vegan', 13.5, 'overproduction', 50, 4],
+  ['bremertonchowder', 'Seafood Chowder Bread Bowl', 'Clams, salmon and shrimp in a sourdough bowl.', '', 14, 'end_of_day', 45, 3],
+  ['issaquahbakehouse', 'Cinnamon Roll 4-Pack', 'Baked this morning with cream cheese icing.', 'vegetarian', 16, 'end_of_day', 60, 3],
 ];
 
 // Real photos for demo dishes can be dropped into public/assets/demo-food/<photo>.jpg (see README).
@@ -103,11 +159,44 @@ function main() {
         .run(ids[user], item.id, item.image_path, item.name, note || item.description, reason, item.dietary, item.price_cents,
           pct, qty, qty, start.toISOString(), end.toISOString());
     }
+
+    REGIONAL.forEach(([user, name, cuisine, address, city, zip], i) => {
+      const uid = userId(`${user}@biteback.test`, user, 'restaurant');
+      let rid = db.prepare('SELECT id FROM restaurants WHERE owner_user_id = ?').get(uid)?.id;
+      if (!rid) {
+        const z = lookupZip(zip);
+        // Small, deterministic offset so restaurants in the same ZIP don't share one pin.
+        const lat = z.lat + (((i * 37) % 11) - 5) * 0.0012;
+        const lng = z.lng + (((i * 53) % 11) - 5) * 0.0016;
+        rid = Number(db.prepare(`
+          INSERT INTO restaurants (owner_user_id, name, cuisine, description, address, city, zip, phone, lat, lng, tax_rate_bps)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(uid, name, cuisine, `Neighborhood ${cuisine.toLowerCase()} spot in ${city}.`, address, city, zip,
+            `(253) 555-${String(1000 + i).slice(-4)}`, lat, lng, config.defaultTaxRateBps).lastInsertRowid);
+      }
+      ids[user] = rid;
+    });
+    REGIONAL_MENU.forEach(([user, dish, desc, dietary, price, reason, pct, qty], i) => {
+      let item = db.prepare('SELECT * FROM menu_items WHERE restaurant_id = ? AND name = ? AND active = 1').get(ids[user], dish);
+      if (!item) {
+        const id = db.prepare('INSERT INTO menu_items (restaurant_id, name, description, price_cents, dietary) VALUES (?, ?, ?, ?, ?)')
+          .run(ids[user], dish, desc, Math.round(price * 100), dietary).lastInsertRowid;
+        item = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(id);
+      }
+      const start = new Date(now - 10 * 60 * 1000);
+      const end = new Date(start.getTime() + (2 + (i % 4)) * hour);
+      db.prepare(`INSERT INTO offers (restaurant_id, menu_item_id, image_path, title, description, reason, dietary, original_price_cents,
+                  discount_pct, quantity_total, quantity_available, pickup_start, pickup_end) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(ids[user], item.id, item.image_path, item.name, item.description, reason, item.dietary, item.price_cents,
+          pct, qty, qty, start.toISOString(), end.toISOString());
+    });
   });
 
   console.log('Seeded demo data.');
   console.log(`  Customer login:   demo / ${DEMO_PASSWORD}`);
-  console.log(`  Restaurant login: ${RESTAURANTS.map((r) => r.user).join(', ')} / ${DEMO_PASSWORD}`);
+  console.log(`  Restaurant logins (password ${DEMO_PASSWORD}):`);
+  console.log(`    Seattle/Eastside: ${RESTAURANTS.map((r) => r.user).join(', ')}`);
+  console.log(`    Around the region: ${REGIONAL.map((r) => `${r[0]} (${r[4]})`).join(', ')}`);
 }
 
 main();

@@ -7,6 +7,12 @@ if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
 const int = (v, d) => (v === undefined || v === '' ? d : Number.parseInt(v, 10));
 
 module.exports = {
+  // Map tiles (Leaflet). OpenStreetMap's public tiles are fine for development and light use;
+  // use a commercial tile provider (MapTiler, Stadia, Mapbox...) in production.
+  mapTileUrl: process.env.MAP_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  mapAttribution: process.env.MAP_ATTRIBUTION || '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  // Darken light map tiles to match the dark UI. Set to false if your tile provider is already dark.
+  mapDarkFilter: process.env.MAP_DARK_FILTER !== 'false',
   timeZone: process.env.TIME_ZONE || 'America/Los_Angeles',
   port: int(process.env.PORT, 3000),
   uploadsDir: process.env.UPLOADS_DIR || path.join(__dirname, '..', 'data', 'uploads'),

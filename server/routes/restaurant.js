@@ -2,6 +2,7 @@ const express = require('express');
 const v = require('../validate');
 const { HttpError, bad } = require('../errors');
 const { requireRole, createLimiter } = require('../auth');
+const { lookupZip } = require('../areas');
 
 module.exports = function restaurantRoutes({ db, orders, images, receipts }) {
   const router = express.Router();
@@ -35,6 +36,8 @@ module.exports = function restaurantRoutes({ db, orders, images, receipts }) {
       taxRateBps: Math.round(Number(b.taxRatePct) * 100),
     };
     if (!(r.taxRateBps >= 0 && r.taxRateBps <= 2000)) throw bad('Sales tax rate must be between 0% and 20%.');
+    const z = lookupZip(r.zip);
+    if ((r.lat == null || r.lng == null) && z) Object.assign(r, { lat: z.lat, lng: z.lng });
     db.prepare(`UPDATE restaurants SET name = ?, description = ?, cuisine = ?, address = ?, city = ?, zip = ?, phone = ?,
                 lat = ?, lng = ?, tax_rate_bps = ? WHERE id = ?`)
       .run(r.name, r.description, r.cuisine, r.address, r.city, r.zip, r.phone, r.lat, r.lng, r.taxRateBps, req.restaurant.id);
