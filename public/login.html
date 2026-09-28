@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Log in · BiteBack</title>
+<meta name="description" content="BiteBack: rescue good restaurant food at a discount around greater Seattle.">
+<meta name="theme-color" content="#E8532E">
+<link rel="icon" href="/assets/logo-mark.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<header id="site-header" class="site-header"></header>
+<main class="auth-wrap">
+  <div class="card auth-card">
+    <img class="logo" src="/assets/logo-mark.svg" alt="">
+    <h1 class="center" style="font-size:1.7rem">Welcome back</h1>
+    <p class="center muted">Log in to rescue some food.</p>
+    <div id="msg"></div>
+    <form id="login-form" novalidate>
+      <div class="field"><label for="login">Email or user name</label><input id="login" autocomplete="username" required></div>
+      <div class="field"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required></div>
+      <button class="btn btn-primary btn-block" type="submit">Log in</button>
+    </form>
+    <p class="center small muted" style="margin-top:16px">New to BiteBack? <a href="/signup">Create a free account</a></p>
+  </div>
+</main>
+<script type="module" src="/js/auth-pages.js"></script>
+</body>
+</html>

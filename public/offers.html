@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Browse deals · BiteBack</title>
+<meta name="description" content="BiteBack: rescue good restaurant food at a discount around greater Seattle.">
+<meta name="theme-color" content="#E8532E">
+<link rel="icon" href="/assets/logo-mark.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<header id="site-header" class="site-header"></header>
+<main class="page">
+  <div class="container">
+    <div class="page-head">
+      <div><h1>Deals near you</h1><p class="muted" id="subtitle" style="margin:4px 0 0">Discounted food ready for pickup around greater Seattle.</p></div>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost btn-sm" id="locate-btn">📍 Use my location</button>
+    </div>
+    <form class="filters" id="filters">
+      <input class="wide" id="f-q" type="search" placeholder="Search food, restaurant or cuisine" aria-label="Search">
+      <input id="f-area" placeholder="City or ZIP" aria-label="City or ZIP">
+      <select id="f-diet" aria-label="Dietary"><option value="">Any diet</option></select>
+      <select id="f-sort" aria-label="Sort">
+        <option value="">Best match</option><option value="distance">Nearest</option><option value="discount">Biggest discount</option>
+        <option value="price">Lowest price</option><option value="ending">Ending soon</option>
+      </select>
+      <select id="f-radius" aria-label="Distance">
+        <option value="">Any distance</option><option value="2">Within 2 mi</option><option value="5">Within 5 mi</option>
+        <option value="10">Within 10 mi</option><option value="25">Within 25 mi</option>
+      </select>
+    </form>
+    <div id="msg"></div>
+    <div id="offers" class="offer-grid" aria-live="polite"></div>
+  </div>
+</main>
+<script type="module" src="/js/offers.js"></script>
+</body>
+</html>
