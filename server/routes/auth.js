@@ -1,0 +1,98 @@
+const express = require('express');
+const v = require('../validate');
+const { hashPassword, verifyPassword, createLimiter } = require('../auth');
+const { HttpError } = require('../errors');
+const { transaction } = require('../db');
+
+module.exports = function authRoutes({ db, config, sessions, payments }) {
+  const router = express.Router();
+  const loginLimiter = createLimiter({ max: 10, windowMs: 15 * 60 * 1000 });
+
+  const findByLogin = db.prepare('SELECT * FROM users WHERE email = ? OR username = ?');
+  const findRestaurant = db.prepare('SELECT * FROM restaurants WHERE owner_user_id = ?');
+
+  function publicUser(user) {
+    const out = { id: user.id, email: user.email, username: user.username, role: user.role };
+    if (user.role === 'restaurant') out.restaurant = findRestaurant.get(user.id) || null;
+    return out;
+  }
+
+  router.post('/signup', (req, res) => {
+    const body = req.body || {};
+    const role = body.role === 'restaurant' ? 'restaurant' : 'customer';
+    const email = v.email(body.email);
+    const username = v.username(body.username);
+    const password = v.password(body.password);
+
+    let restaurant = null;
+    if (role === 'restaurant') {
+      const r = body.restaurant || {};
+      restaurant = {
+        name: v.str(r.name, 'Restaurant name', { min: 2, max: 80 }),
+        address: v.str(r.address, 'Street address', { min: 3, max: 120 }),
+        city: v.str(r.city, 'City', { min: 2, max: 60 }),
+        zip: v.zip(r.zip),
+        phone: v.str(r.phone, 'Phone', { max: 30, optional: true }),
+        cuisine: v.str(r.cuisine, 'Cuisine', { max: 40, optional: true }),
+        lat: v.coord(r.lat, 'Latitude', 90),
+        lng: v.coord(r.lng, 'Longitude', 180),
+      };
+    }
+
+    if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) throw new HttpError(409, 'An account with this email already exists.');
+    if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) throw new HttpError(409, 'That user name is taken.');
+
+    const userId = transaction(db, () => {
+      const { lastInsertRowid } = db
+        .prepare('INSERT INTO users (email, username, password_hash, role) VALUES (?, ?, ?, ?)')
+        .run(email, username, hashPassword(password), role);
+      if (restaurant) {
+        db.prepare(`INSERT INTO restaurants (owner_user_id, name, address, city, zip, phone, cuisine, lat, lng, tax_rate_bps)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(lastInsertRowid, restaurant.name, restaurant.address, restaurant.city, restaurant.zip, restaurant.phone,
+            restaurant.cuisine, restaurant.lat, restaurant.lng, config.defaultTaxRateBps);
+      }
+      return Number(lastInsertRowid);
+    });
+
+    sessions.start(res, userId);
+    res.status(201).json({ user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(userId)) });
+  });
+
+  router.post('/login', (req, res) => {
+    const login = String(req.body?.login || '').trim();
+    const password = String(req.body?.password || '');
+    const key = `${req.ip}|${login.toLowerCase()}`;
+    if (!loginLimiter.check(key)) throw new HttpError(429, 'Too many attempts. Please wait a few minutes and try again.');
+
+    const user = login ? findByLogin.get(login, login) : null;
+    if (!user || !verifyPassword(password, user.password_hash)) {
+      loginLimiter.fail(key);
+      throw new HttpError(401, 'Email/user name or password is incorrect.');
+    }
+    loginLimiter.reset(key);
+    sessions.start(res, user.id);
+    res.json({ user: publicUser(user) });
+  });
+
+  router.post('/logout', (req, res) => {
+    sessions.end(req, res);
+    res.json({ ok: true });
+  });
+
+  router.get('/me', (req, res) => {
+    res.json({ user: req.user ? publicUser(req.user) : null });
+  });
+
+  router.get('/config', (_req, res) => {
+    res.json({
+      paymentMode: payments.mode,
+      stripePublishableKey: payments.mode === 'stripe' ? config.stripePublishableKey : null,
+      serviceFeeBps: config.serviceFeeBps,
+      reasons: v.OFFER_REASONS,
+      dietaryTags: v.DIETARY_TAGS,
+    });
+  });
+
+  return router;
+};

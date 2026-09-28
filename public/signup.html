@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign up · BiteBack</title>
+<meta name="description" content="BiteBack: rescue good restaurant food at a discount around greater Seattle.">
+<meta name="theme-color" content="#E8532E">
+<link rel="icon" href="/assets/logo-mark.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<header id="site-header" class="site-header"></header>
+<main class="auth-wrap">
+  <div class="card auth-card">
+    <img class="logo" src="/assets/logo-mark.svg" alt="">
+    <h1 class="center" style="font-size:1.7rem">Create your free account</h1>
+    <div class="segmented" role="tablist">
+      <button type="button" data-role="customer" class="on">I want food</button>
+      <button type="button" data-role="restaurant">I'm a restaurant</button>
+    </div>
+    <div id="msg"></div>
+    <form id="signup-form" novalidate>
+      <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="email" required></div>
+      <div class="field"><label for="username">User name</label><input id="username" autocomplete="username" required>
+        <div class="hint">3–24 characters: letters, numbers, dots or underscores.</div></div>
+      <div class="field"><label for="password">Password</label><input id="password" type="password" autocomplete="new-password" required>
+        <div class="hint">At least 8 characters, with a letter and a number.</div></div>
+      <div id="restaurant-fields" class="hidden">
+        <div class="section-label">Restaurant details</div>
+        <div class="field"><label for="r-name">Restaurant name</label><input id="r-name"></div>
+        <div class="field"><label for="r-address">Street address</label><input id="r-address" autocomplete="street-address"></div>
+        <div class="grid-2">
+          <div class="field"><label for="r-city">City</label><input id="r-city" autocomplete="address-level2" placeholder="Seattle"></div>
+          <div class="field"><label for="r-zip">ZIP code</label><input id="r-zip" autocomplete="postal-code" inputmode="numeric"></div>
+        </div>
+        <div class="grid-2">
+          <div class="field"><label for="r-phone">Phone</label><input id="r-phone" type="tel" autocomplete="tel"></div>
+          <div class="field"><label for="r-cuisine">Cuisine</label><input id="r-cuisine" placeholder="e.g. Thai"></div>
+        </div>
+        <p class="small muted">You can set your exact map location and sales-tax rate in the portal after signing up.</p>
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">Create account</button>
+    </form>
+    <p class="center small muted" style="margin-top:16px">Already have an account? <a href="/login">Log in</a></p>
+  </div>
+</main>
+<script type="module" src="/js/auth-pages.js"></script>
+</body>
+</html>

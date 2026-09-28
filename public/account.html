@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Account · BiteBack</title>
+<meta name="description" content="BiteBack: rescue good restaurant food at a discount around greater Seattle.">
+<meta name="theme-color" content="#E8532E">
+<link rel="icon" href="/assets/logo-mark.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<header id="site-header" class="site-header"></header>
+<main class="page">
+  <div class="container stack" style="max-width:720px">
+    <h1>Account</h1>
+    <div class="card">
+      <h3>Profile</h3>
+      <p style="margin:0">User name: <b id="acct-username"></b><br>Email: <b id="acct-email"></b></p>
+    </div>
+    <div class="card">
+      <div class="row"><h3 style="margin:0">Saved cards</h3><span class="spacer"></span><button class="btn btn-green btn-sm" id="add-card-btn">+ Add card</button></div>
+      <p class="small muted" style="margin:6px 0 0">Saved cards make checkout one tap. Cards are only charged when you pick up an order.</p>
+      <div id="cards-msg"></div>
+      <div id="cards"></div>
+    </div>
+  </div>
+</main>
+<script type="module" src="/js/account.js"></script>
+</body>
+</html>
