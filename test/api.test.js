@@ -290,3 +290,86 @@ test('restaurant gets a live event when an order is placed', async (t) => {
   assert.equal(data.pin, undefined, 'PIN is never sent to the restaurant');
   ctrl.abort();
 });
+
+test('receipt shows full order details; restaurant daily report as JSON, PDF and CSV', async (t) => {
+  const env = await setup();
+  t.after(() => env.server.close());
+  const shop = env.client();
+  await shop('/auth/signup', { method: 'POST', body: {
+    role: 'restaurant', email: 'o@example.com', username: 'shop', password: 'secret123',
+    restaurant: { name: 'Pho Place', address: '1 Pine St', city: 'Seattle', zip: '98101', phone: '(206) 555-0199' },
+  } });
+  const item = await menuItem(shop, 'Beef Pho', '16.00');
+  let r = await shop('/restaurant/offers', { method: 'POST', body: {
+    menuItemId: item, reason: 'wrong_order', discountPct: 50, quantity: 3,
+    pickupStart: new Date().toISOString(), pickupEnd: new Date(Date.now() + 3600000).toISOString(),
+  } });
+  const offerId = r.body.offer.id;
+
+  const c = env.client();
+  await c('/auth/signup', { method: 'POST', body: { email: 'dana@example.com', username: 'dana', password: 'password1' } });
+  r = await c('/orders', { method: 'POST', body: { offerId, quantity: 2, newCard: { token: card() } } });
+  const order = r.body.order;
+
+  r = await c(`/orders/${order.id}/receipt`);
+  const rc = r.body.receipt;
+  assert.match(rc.receiptNumber, /^BB-\d{8}-\d{6}$/);
+  assert.equal(rc.restaurant.name, 'Pho Place');
+  assert.equal(rc.customer.email, 'dana@example.com');
+  assert.equal(rc.item.title, 'Beef Pho');
+  assert.equal(rc.item.originalUnitCents, 1600);
+  assert.equal(rc.item.discountPct, 50);
+  assert.equal(rc.item.unitPriceCents, 800);
+  assert.equal(rc.item.savingsCents, 1600);
+  assert.equal(rc.card, 'VISA •••• 4242');
+  assert.match(rc.paymentRef, /^pi_/);
+  assert.equal(rc.amountChargedCents, 0, 'not charged before pickup');
+  assert.equal(rc.pin, order.pin);
+
+  await shop('/restaurant/pickup/confirm', { method: 'POST', body: { pin: order.pin } });
+  r = await c(`/orders/${order.id}/receipt`);
+  assert.equal(r.body.receipt.amountChargedCents, order.totalCents);
+  assert.equal(r.body.receipt.pin, null);
+
+  const base = env.base;
+  const getRaw = async (client, path) => {
+    // reuse the client's cookie by calling through it once, then fetch raw bytes
+    const login = await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-requested-with': 'BiteBack' },
+      body: JSON.stringify(client) });
+    return fetch(base + path, { headers: { cookie: login.headers.get('set-cookie').split(';')[0] } });
+  };
+  let res = await getRaw({ login: 'dana', password: 'password1' }, `/orders/${order.id}/receipt.pdf`);
+  assert.equal(res.headers.get('content-type'), 'application/pdf');
+  assert.match(res.headers.get('content-disposition'), /attachment; filename="BiteBack-receipt-BB-/);
+  assert.equal(Buffer.from(await res.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
+
+  res = await getRaw({ login: 'shop', password: 'secret123' }, `/orders/${order.id}/receipt.pdf`);
+  assert.equal(res.status, 403, 'restaurants cannot open customer receipts');
+
+  r = await shop('/restaurant/report');
+  const rep = r.body.report;
+  assert.equal(rep.summary.ordersPickedUp, 1);
+  assert.equal(rep.summary.mealsRescued, 2);
+  assert.equal(rep.summary.foodSalesCents, 1600);
+  assert.equal(rep.summary.discountsCents, 1600);
+  assert.equal(rep.orders[0].item, 'Beef Pho');
+
+  res = await getRaw({ login: 'shop', password: 'secret123' }, `/restaurant/report.pdf?date=${rep.date}`);
+  assert.equal(Buffer.from(await res.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
+  res = await getRaw({ login: 'shop', password: 'secret123' }, `/restaurant/report.csv?date=${rep.date}`);
+  const csv = await res.text();
+  assert.match(csv, /^Order #,Ordered,Picked up,Customer,Item/);
+  assert.match(csv, /Beef Pho,2,16\.00,50,8\.00,16\.00/);
+
+  r = await shop('/restaurant/report?date=2020-01-01');
+  assert.equal(r.body.report.orders.length, 0);
+  r = await shop('/restaurant/report?date=nope');
+  assert.equal(r.status, 400);
+});
+
+test('dayRange handles Pacific time and DST', () => {
+  const { dayRange } = require('../server/receipts');
+  assert.deepEqual(dayRange('2026-01-15', 'America/Los_Angeles'), { start: '2026-01-15T08:00:00.000Z', end: '2026-01-16T08:00:00.000Z' });
+  assert.deepEqual(dayRange('2026-07-04', 'America/Los_Angeles'), { start: '2026-07-04T07:00:00.000Z', end: '2026-07-05T07:00:00.000Z' });
+  assert.deepEqual(dayRange('2026-03-08', 'America/Los_Angeles'), { start: '2026-03-08T08:00:00.000Z', end: '2026-03-09T07:00:00.000Z' });
+});

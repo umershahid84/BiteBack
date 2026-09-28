@@ -41,9 +41,8 @@ export async function createCardEntry(container) {
   if (config.paymentMode === 'stripe') {
     const stripe = await loadStripe(config.stripePublishableKey);
     container.innerHTML = '<div class="stripe-el"></div><div class="test-note">🔒 Card details are sent securely to Stripe and never stored on BiteBack servers.</div>';
-    const dark = matchMedia('(prefers-color-scheme: dark)').matches;
     const card = stripe.elements().create('card', {
-      style: { base: { fontSize: '16px', color: dark ? '#eaf4ee' : '#15261d', '::placeholder': { color: '#86998f' } } },
+      style: { base: { fontSize: '16px', color: '#ecfdf5', '::placeholder': { color: '#86998f' } } },
     });
     card.mount($('.stripe-el', container));
     return {

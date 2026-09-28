@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="BiteBack">
   <defs>
     <linearGradient id="m-tile" x1="0" y1="0" x2="200" y2="200" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#8B5CF6"/>
-      <stop offset=".55" stop-color="#EC4899"/>
-      <stop offset="1" stop-color="#F97316"/>
+      <stop offset="0" stop-color="#34D399"/>
+      <stop offset=".55" stop-color="#059669"/>
+      <stop offset="1" stop-color="#065F46"/>
     </linearGradient>
     <linearGradient id="m-leaf" x1="96" y1="20" x2="150" y2="70" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#BEF264"/>
-      <stop offset="1" stop-color="#22C55E"/>
+      <stop offset="0" stop-color="#FDE047"/>
+      <stop offset="1" stop-color="#F59E0B"/>
     </linearGradient>
     <mask id="m-b" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200">
       <rect width="200" height="200" fill="#000"/>

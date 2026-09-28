@@ -208,7 +208,7 @@ function showConfirmation(modal, order, offer) {
         💳 ${esc(order.cardLabel)} will be charged <b>${money(order.totalCents)}</b> only when the restaurant enters your PIN.
       </div>
       <div class="row" style="justify-content:center;margin-top:18px">
-        <a class="btn btn-primary" href="/orders">View my orders</a><button class="btn btn-ghost" id="keep-browsing">Keep browsing</button>
+        <a class="btn btn-primary" href="/orders">View my orders</a><a class="btn btn-ghost" href="/receipt?order=${order.id}">🧾 Receipt</a><button class="btn btn-ghost" id="keep-browsing">Keep browsing</button>
       </div>
     </div>`;
   $('#keep-browsing', modal.body).addEventListener('click', modal.close);

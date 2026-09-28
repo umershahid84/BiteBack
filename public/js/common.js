@@ -86,7 +86,7 @@ export async function renderHeader(active) {
   el.innerHTML = `
     <div class="container">
       <a class="brand" href="${user ? homeFor(user) : '/'}" aria-label="BiteBack home">
-        <img class="logo-light" src="/assets/logo.svg" alt="BiteBack"><img class="logo-dark" src="/assets/logo-dark.svg" alt="BiteBack">
+        <img src="/assets/logo-dark.svg" alt="BiteBack">
       </a>
       <button class="nav-toggle" aria-label="Menu" aria-expanded="false">☰</button>
       <nav class="nav">${links}</nav>

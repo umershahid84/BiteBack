@@ -1,4 +1,4 @@
-import { api, $, esc, money, pct, fmtDateTime, fmtTime, renderHeader, requireRole, showError, toast, pinTiles } from './common.js';
+import { api, $, esc, money, fmtDateTime, fmtTime, renderHeader, requireRole, showError, toast, pinTiles } from './common.js';
 
 await requireRole('customer');
 renderHeader('orders');
@@ -38,14 +38,12 @@ function render(orders) {
           <h3 style="margin:8px 0 2px">${o.quantity} × ${esc(o.itemTitle)}</h3>
           <div class="muted small">${esc(r.name)} · ${esc(r.address)}, ${esc(r.city)} · Ordered ${fmtDateTime(o.createdAt)}</div>
           ${o.status === 'reserved' ? `<div class="small" style="margin-top:6px">🕒 Pick up by <b>${fmtTime(o.pickupEnd)}</b></div>` : ''}
-          <details style="margin-top:8px"><summary class="small">Receipt</summary>
-            <table class="breakdown small" style="max-width:340px">
-              <tr><td>${o.quantity} × ${money(o.unitPriceCents)} (${o.discountPct}% off)</td><td>${money(o.subtotalCents)}</td></tr>
-              <tr><td>Service fee</td><td>${money(o.serviceFeeCents)}</td></tr>
-              <tr><td>WA sales tax (${pct(o.taxRateBps)})</td><td>${money(o.taxCents)}</td></tr>
-              <tr class="total"><td>Total</td><td>${money(o.totalCents)}</td></tr>
-            </table>
-          </details>
+          <div class="small" style="margin-top:8px">${o.quantity} × <span class="was">${money(o.originalUnitPriceCents)}</span> <b>${money(o.unitPriceCents)}</b>
+            <span class="chip diet" style="margin-left:4px">-${o.discountPct}%</span> · Total <b>${money(o.totalCents)}</b></div>
+          <div class="row" style="margin-top:10px;gap:8px">
+            <a class="btn btn-ghost btn-sm" href="/receipt?order=${o.id}">🧾 View receipt</a>
+            <a class="btn btn-ghost btn-sm" href="/api/orders/${o.id}/receipt.pdf">⬇ Download PDF</a>
+          </div>
           <div class="small muted" style="margin-top:6px">${charged}</div>
         </div>
         </div>
