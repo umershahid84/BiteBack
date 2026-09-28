@@ -76,7 +76,7 @@ export async function renderHeader(active) {
     links = link('/#how', 'How it works', 'how') + link('/#restaurants', 'For restaurants', 'rest') + link('/login', 'Log in', 'login') +
       '<a href="/signup" class="btn btn-primary btn-sm">Sign up free</a>';
   } else if (user.role === 'restaurant') {
-    links = link('/restaurant/', 'Dashboard', 'dash') + `<span class="muted small" style="padding:0 8px">${esc(user.restaurant?.name || user.username)}</span>` +
+    links = link('/restaurant/', 'Dashboard', 'dash') + `<span class="who">${esc(user.restaurant?.name || user.username)}</span>` +
       '<button class="linklike" id="logout-btn">Log out</button>';
   } else {
     links = link('/offers', 'Browse deals', 'offers') + link('/orders', 'My orders', 'orders') + link('/account', 'Account', 'account') +
@@ -157,3 +157,8 @@ export async function withBusy(button, fn) {
 
 const CUISINE_EMOJI = { vietnamese: '🍜', bakery: '🥐', mexican: '🌮', pizza: '🍕', indian: '🍛', hawaiian: '🐟', japanese: '🍣', thai: '🍲', chinese: '🥡', italian: '🍝', burgers: '🍔', american: '🍔', korean: '🍱', mediterranean: '🥙', cafe: '☕', dessert: '🍰', salad: '🥗' };
 export const cuisineEmoji = (c) => CUISINE_EMOJI[String(c || '').toLowerCase()] || '🍽️';
+
+const CUISINE_HUE = { vietnamese: 28, bakery: 40, mexican: 12, pizza: 0, indian: 30, hawaiian: 190, japanese: 340, thai: 60, chinese: 355, italian: 110, burgers: 20, american: 20, korean: 320, mediterranean: 80, cafe: 35, dessert: 300, salad: 100 };
+export const cuisineHue = (c) => CUISINE_HUE[String(c || '').toLowerCase()] ?? 150;
+
+export const pinTiles = (pin, cls = '') => `<div class="pin-tiles ${cls}" role="img" aria-label="PIN ${esc(pin.split('').join(' '))}">${pin.split('').map((d) => `<span>${esc(d)}</span>`).join('')}</div>`;

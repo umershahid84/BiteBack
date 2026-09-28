@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BiteBack — Rescue good food, save money</title>
 <meta name="description" content="BiteBack: rescue good restaurant food at a discount around greater Seattle.">
-<meta name="theme-color" content="#E8532E">
+<meta name="theme-color" content="#059669">
 <link rel="icon" href="/assets/logo-mark.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
 <link rel="stylesheet" href="/css/styles.css">
@@ -16,51 +16,70 @@
   <section class="hero">
     <div class="container">
       <div>
-        <h1>Great food shouldn't end up in the <em>trash</em>.</h1>
-        <p class="lead">Wrong orders, late deliveries, food nobody picked up. Seattle-area restaurants list it on BiteBack at a discount, and you pick it up.</p>
+        <span class="eyebrow">🌱 Now serving greater Seattle</span>
+        <h1>Rescue great food.<br><span class="grad-text">Save up to 70%.</span></h1>
+        <p class="lead">Wrong orders, late deliveries, meals nobody picked up. Local restaurants post them on BiteBack at a discount, and you grab them before they go to waste.</p>
         <div class="row">
-          <a class="btn btn-primary" href="/signup">Find deals near me</a>
-          <a class="btn btn-ghost" href="/signup?role=restaurant">List your restaurant</a>
+          <a class="btn btn-primary btn-lg" href="/signup">Find deals near me →</a>
+          <a class="btn btn-ghost btn-lg" href="/signup?role=restaurant">I'm a restaurant</a>
         </div>
-        <div class="stats-band">
-          <div class="stat"><b>30–70%</b><span class="muted">typical savings on restaurant meals</span></div>
-          <div class="stat"><b>$0</b><span class="muted">to join. Free accounts for everyone</span></div>
-          <div class="stat"><b>4-digit PIN</b><span class="muted">for a quick, secure pickup</span></div>
-        </div>
+        <div class="trust"><span>Free account</span><span>Pay only at pickup</span><span>Secure 4-digit PIN</span></div>
       </div>
-      <div class="hero-art"><div class="blob"></div><img src="/assets/logo-mark.svg" alt=""></div>
+      <div class="mock" aria-hidden="true">
+        <div class="mock-card offer">
+          <div class="offer-top" style="--h:28"><span class="emoji">🍜</span><span class="badge-off">-50%</span><span class="badge-left low">2 left</span></div>
+          <div class="offer-body">
+            <h3>Large Beef Pho</h3>
+            <div class="offer-rest">Harbor Pho House · Seattle</div>
+            <div class="offer-meta"><span>🕒 Today 5:00 – 8:00 PM</span><span>📍 0.4 mi</span></div>
+            <div class="chips"><span class="chip reason">Wrong order</span><span class="chip diet">dairy-free</span></div>
+            <div class="price-row"><span class="price">$8.48</span><span class="was">$16.95</span><span class="spacer"></span><span class="btn btn-primary btn-sm">Order</span></div>
+          </div>
+        </div>
+        <div class="mock-pin"><small>Your pickup PIN</small><b>4827</b></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top:24px">
+    <div class="container stats-band">
+      <div class="stat"><b class="grad-text">30–70%</b><span class="muted">typical savings on restaurant meals</span></div>
+      <div class="stat"><b>$0</b><span class="muted">to join, for customers and restaurants</span></div>
+      <div class="stat"><b>1 minute</b><span class="muted">for a restaurant to post surplus food</span></div>
     </div>
   </section>
 
   <section class="section" id="how">
     <div class="container">
-      <h2>How BiteBack works</h2>
-      <p class="muted">Order in seconds. Pay only when you pick up.</p>
+      <div class="section-head">
+        <span class="eyebrow">How it works</span>
+        <h2 style="margin-top:14px">Order in seconds. Pay only when you pick up.</h2>
+      </div>
       <div class="steps">
-        <div class="step"><h3>Browse nearby deals</h3><p class="muted">See discounted meals from restaurants around you, with pickup times and how many are left.</p></div>
-        <div class="step"><h3>Review your total</h3><p class="muted">Food price, 5% service fee and WA sales tax are all shown before you order. No surprises.</p></div>
-        <div class="step"><h3>Get your PIN</h3><p class="muted">We place a hold on your card and give you a 4-digit PIN to show at the restaurant.</p></div>
-        <div class="step"><h3>Pick up &amp; pay</h3><p class="muted">The restaurant enters your PIN. Your card is charged only then, at pickup.</p></div>
+        <div class="step"><div class="icon">🔎</div><h3>Browse nearby deals</h3><p class="muted">Discounted meals from restaurants around you, with pickup times and how many are left.</p></div>
+        <div class="step"><div class="icon">🧾</div><h3>See the full total</h3><p class="muted">Food, 5% service fee and WA sales tax are all shown before you order. No surprises.</p></div>
+        <div class="step"><div class="icon">🔢</div><h3>Get your PIN</h3><p class="muted">We place a hold on your card and give you a 4-digit PIN to show at the counter.</p></div>
+        <div class="step"><div class="icon">🥡</div><h3>Pick up &amp; enjoy</h3><p class="muted">The restaurant enters your PIN. Only then is your card charged.</p></div>
       </div>
     </div>
   </section>
 
   <section class="section" id="restaurants">
     <div class="container split">
-      <div class="cta-card orange">
-        <h2>Hungry? Save on great food.</h2>
-        <p>Create a free account with your email, a user name and a password. Save your card for one-tap checkout next time.</p>
+      <div class="cta-card green">
+        <h2>Hungry? Eat well for less.</h2>
+        <p>Create a free account with your email, a user name and a password. Save your card for one-tap checkout.</p>
         <a class="btn" href="/signup">Create free account</a>
       </div>
-      <div class="cta-card green">
+      <div class="cta-card orange">
         <h2>Restaurants: turn waste into revenue.</h2>
-        <p>Post surplus food in under a minute, choose your own discount, and confirm pickups with the customer's PIN.</p>
+        <p>Post surplus food in under a minute, set your own discount, and confirm pickups with the customer's PIN.</p>
         <a class="btn" href="/signup?role=restaurant">Open restaurant portal</a>
       </div>
     </div>
   </section>
 </main>
-<footer class="site-footer"><div class="container row"><span>© BiteBack · Greater Seattle, WA</span><span class="spacer"></span><span>Less waste. More taste.</span></div></footer>
+<footer class="site-footer"><div class="container row"><img class="logo-light" src="/assets/logo.svg" alt="BiteBack"><span class="spacer"></span><span>© BiteBack · Greater Seattle, WA · Less waste, more taste.</span></div></footer>
 <script type="module" src="/js/landing.js"></script>
 </body>
 </html>

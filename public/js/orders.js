@@ -1,4 +1,4 @@
-import { api, $, esc, money, pct, fmtDateTime, fmtTime, renderHeader, requireRole, showError, toast } from './common.js';
+import { api, $, esc, money, pct, fmtDateTime, fmtTime, renderHeader, requireRole, showError, toast, pinTiles } from './common.js';
 
 await requireRole('customer');
 renderHeader('orders');
@@ -49,7 +49,7 @@ function render(orders) {
         ${o.status === 'reserved' ? `
         <div class="pin-box" style="min-width:200px">
           <div class="small muted">Pickup PIN</div>
-          <div class="pin" style="font-size:2.2rem">${esc(o.pin)}</div>
+          ${pinTiles(o.pin, 'sm')}
           <button class="btn btn-danger btn-sm" data-cancel="${o.id}" style="margin-top:10px">Cancel order</button>
         </div>` : ''}
       </div>

@@ -1,4 +1,5 @@
-import { api, $, esc, money, pct, fmtWindow, fmtTime, renderHeader, requireRole, showError, openModal, withBusy, cuisineEmoji } from './common.js';
+import { api, $, esc, money, pct, fmtWindow, fmtTime, renderHeader, requireRole, showError, openModal, withBusy, cuisineEmoji, cuisineHue, pinTiles } from './common.js';
+import { confetti } from './confetti.js';
 import { createCardEntry, cardText, getConfig } from './cards.js';
 
 await requireRole('customer');
@@ -46,9 +47,9 @@ function render() {
   }
   grid.innerHTML = offers.map((o) => `
     <article class="offer">
-      <div class="offer-top" aria-hidden="true">${cuisineEmoji(o.restaurant.cuisine)}
+      <div class="offer-top" style="--h:${cuisineHue(o.restaurant.cuisine)}"><span class="emoji" aria-hidden="true">${cuisineEmoji(o.restaurant.cuisine)}</span>
         <span class="badge-off">-${o.discountPct}%</span>
-        <span class="badge-left">${o.quantityAvailable} left</span>
+        <span class="badge-left ${o.quantityAvailable <= 2 ? 'low' : ''}">${o.quantityAvailable} left</span>
       </div>
       <div class="offer-body">
         <h3>${esc(o.title)}</h3>
@@ -112,7 +113,7 @@ async function openCheckout(offer) {
       <div class="qty"><button type="button" data-q="-1" aria-label="Fewer">−</button><span id="qty">1</span><button type="button" data-q="1" aria-label="More">+</button></div></div>
 
     <div class="section-label">Order summary</div>
-    <table class="breakdown" id="breakdown"></table>
+    <div class="summary-box"><table class="breakdown" id="breakdown"></table></div>
 
     <div class="section-label">Payment</div>
     <div id="pay-options"></div>
@@ -186,17 +187,29 @@ async function openCheckout(offer) {
 
 function showConfirmation(modal, order) {
   const r = order.restaurant;
-  modal.el.querySelector('.modal-head h2').textContent = 'Order reserved!';
+  modal.el.querySelector('.modal-head h2').textContent = '';
   modal.body.innerHTML = `
-    <div class="pin-box">
-      <div class="small muted">Show this PIN at pickup</div>
-      <div class="pin" aria-label="PIN ${order.pin.split('').join(' ')}">${esc(order.pin)}</div>
-    </div>
-    <p style="margin-top:16px"><b>${order.quantity} × ${esc(order.itemTitle)}</b><br>
-      <span class="muted">${esc(r.name)} · ${esc(r.address)}, ${esc(r.city)}</span></p>
-    <p>Pick up by <b>${fmtTime(order.pickupEnd)}</b>. When the restaurant enters your PIN, your ${esc(order.cardLabel)} will be charged <b>${money(order.totalCents)}</b>.</p>
-    <div class="row"><a class="btn btn-green" href="/orders">View my orders</a><button class="btn btn-ghost" id="keep-browsing">Keep browsing</button></div>`;
+    <div class="celebrate">
+      <div class="burst" aria-hidden="true">🎉</div>
+      <h2>Congratulations!</h2>
+      <p class="muted" style="margin:0">Your food is secured. You just rescued ${order.quantity === 1 ? 'a meal' : `${order.quantity} meals`} from going to waste.</p>
+      <div class="pin-panel">
+        <small>Your pickup PIN</small>
+        ${pinTiles(order.pin)}
+        <div class="small" style="opacity:.9">Show this PIN at the counter</div>
+      </div>
+      <div class="details">
+        <b>${order.quantity} × ${esc(order.itemTitle)}</b><br>
+        <span class="muted">${esc(r.name)} · ${esc(r.address)}, ${esc(r.city)}</span><br>
+        🕒 Pick up by <b>${fmtTime(order.pickupEnd)}</b><br>
+        💳 ${esc(order.cardLabel)} will be charged <b>${money(order.totalCents)}</b> only when the restaurant enters your PIN.
+      </div>
+      <div class="row" style="justify-content:center;margin-top:18px">
+        <a class="btn btn-primary" href="/orders">View my orders</a><button class="btn btn-ghost" id="keep-browsing">Keep browsing</button>
+      </div>
+    </div>`;
   $('#keep-browsing', modal.body).addEventListener('click', modal.close);
+  confetti();
 }
 
 load();
