@@ -480,3 +480,5 @@ table.data tbody tr:hover { background: color-mix(in srgb, var(--surface-2) 60%,
 #daily-chart { position: relative; }
 .chart-tip { position: absolute; top: 8px; width: 180px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: .82rem; box-shadow: var(--shadow-lg); pointer-events: none; z-index: 2; }
 .restaurant-status { margin-bottom: 18px; }
+input.locked, input[readonly].locked { background: var(--surface-2); color: var(--primary-ink); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; letter-spacing: .03em; cursor: not-allowed; border-style: dashed; }
+input.locked:focus { box-shadow: none; border-color: var(--line); }

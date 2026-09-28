@@ -4,6 +4,7 @@ const v = require('../validate');
 const { HttpError, bad } = require('../errors');
 const { requireRole } = require('../auth');
 const { dayRange } = require('../receipts');
+const { transaction } = require('../db');
 
 const csvEscape = (x) => (/[",\n]/.test(String(x)) ? `"${String(x).replace(/"/g, '""')}"` : String(x));
 const toCsv = (rows) => `${rows.map((r) => r.map(csvEscape).join(',')).join('\n')}\n`;
@@ -245,6 +246,14 @@ module.exports = function adminRoutes({ db, config, payments, orders, receipts, 
       .filter((x) => x.earnedCents || x.paidCents);
   }
 
+  // Payout references are assigned by the system and can't be edited: BBP-<YYYYMMDD>-<payout #>.
+  const payoutReference = (id, at = new Date()) => `BBP-${dayKey(at.toISOString()).replace(/-/g, '')}-${String(id).padStart(6, '0')}`;
+  const nextPayoutId = () => (db.prepare('SELECT COALESCE(MAX(id), 0) + 1 AS n FROM payouts').get().n);
+
+  router.get('/payouts/next-reference', (req, res) => {
+    res.json({ reference: payoutReference(nextPayoutId()) });
+  });
+
   router.get('/payouts', (req, res) => {
     const history = db.prepare(`SELECT p.*, r.name AS restaurant_name, u.username AS created_by_name FROM payouts p
       JOIN restaurants r ON r.id = p.restaurant_id LEFT JOIN users u ON u.id = p.created_by ORDER BY p.paid_at DESC LIMIT 200`).all();
@@ -255,11 +264,17 @@ module.exports = function adminRoutes({ db, config, payments, orders, receipts, 
     const r = db.prepare('SELECT * FROM restaurants WHERE id = ?').get(Number(req.body?.restaurantId));
     if (!r) throw new HttpError(404, 'Restaurant not found.');
     const amount = v.dollarsToCents(req.body?.amount, 'Amount', { min: 0.01, max: 1000000 });
-    const reference = v.str(req.body?.reference, 'Reference', { max: 120, optional: true });
     const note = v.str(req.body?.note, 'Note', { max: 300, optional: true });
-    db.prepare('INSERT INTO payouts (restaurant_id, amount_cents, reference, note, created_by) VALUES (?, ?, ?, ?, ?)').run(r.id, amount, reference, note, req.user.id);
-    audit(req, 'payout.record', 'restaurant', r.id, `${r.name}: $${dollars(amount)}${reference ? ` (${reference})` : ''}`);
-    res.status(201).json({ ok: true });
+    // Any reference sent by the client is ignored; the system assigns it from the payout number.
+    const reference = transaction(db, () => {
+      const { lastInsertRowid } = db.prepare('INSERT INTO payouts (restaurant_id, amount_cents, note, created_by) VALUES (?, ?, ?, ?)')
+        .run(r.id, amount, note, req.user.id);
+      const ref = payoutReference(Number(lastInsertRowid));
+      db.prepare('UPDATE payouts SET reference = ? WHERE id = ?').run(ref, lastInsertRowid);
+      return ref;
+    });
+    audit(req, 'payout.record', 'restaurant', r.id, `${r.name}: $${dollars(amount)} (${reference})`);
+    res.status(201).json({ ok: true, reference });
   });
 
   router.get('/payouts.csv', (req, res) => {

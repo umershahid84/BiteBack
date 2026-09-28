@@ -574,8 +574,13 @@ test('admin console: approvals, suspensions, refunds, payouts, tax, settings and
   const bal = r.body.balances.find((b) => b.restaurantId === rid);
   const foodRefund = Math.round((500 * order.subtotalCents) / order.totalCents);
   assert.equal(bal.earnedCents, order.subtotalCents - foodRefund);
-  r = await admin('/admin/payouts', { method: 'POST', body: { restaurantId: rid, amount: (bal.earnedCents / 100).toFixed(2), reference: 'ACH-1' } });
+  const preview = (await admin('/admin/payouts/next-reference')).body.reference;
+  assert.match(preview, /^BBP-\d{8}-000001$/);
+  r = await admin('/admin/payouts', { method: 'POST', body: { restaurantId: rid, amount: (bal.earnedCents / 100).toFixed(2), reference: 'MY-OWN-REF' } });
   assert.equal(r.status, 201);
+  assert.equal(r.body.reference, preview, 'system-assigned reference, client value ignored');
+  assert.equal((await admin('/admin/payouts')).body.history[0].reference, preview);
+  assert.match((await admin('/admin/payouts/next-reference')).body.reference, /-000002$/);
   r = await admin('/admin/payouts');
   assert.equal(r.body.balances.find((b) => b.restaurantId === rid).balanceCents, 0);
 

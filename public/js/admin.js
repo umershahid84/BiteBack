@@ -334,15 +334,18 @@ async function payouts(panel) {
     if (!b) return;
     const r = balances.find((x) => x.restaurantId === Number(b.dataset.pay));
     const modal = openModal(`Record payout · ${r.name}`, `
+      <div class="field"><label for="p-ref">Reference 🔒</label><input id="p-ref" readonly aria-readonly="true" class="locked" value="Assigning…" tabindex="-1">
+        <div class="hint">Assigned automatically and can't be changed. Put it in the memo of your bank transfer so the restaurant can match the payment.</div></div>
       <div class="field"><label for="p-amt">Amount paid ($)</label><input id="p-amt" inputmode="decimal" value="${(r.balanceCents / 100).toFixed(2)}"></div>
-      <div class="field"><label for="p-ref">Reference</label><input id="p-ref" maxlength="120" placeholder="e.g. ACH trace #, check #, transfer ID"></div>
-      <div class="field"><label for="p-note">Note (optional)</label><input id="p-note" maxlength="300"></div>
+      <div class="field"><label for="p-note">Bank transfer details / note (optional)</label><input id="p-note" maxlength="300" placeholder="e.g. ACH trace #, check #"></div>
       <div id="p-msg"></div><button class="btn btn-primary btn-block" id="p-go">Record payout</button>`);
+    api('/admin/payouts/next-reference').then(({ reference }) => { $('#p-ref', modal.body).value = reference; })
+      .catch(() => { $('#p-ref', modal.body).value = 'Assigned when saved'; });
     $('#p-go', modal.body).addEventListener('click', (ev) => withBusy(ev.currentTarget, async () => {
       try {
-        await api('/admin/payouts', { method: 'POST', body: { restaurantId: r.restaurantId, amount: $('#p-amt', modal.body).value,
-          reference: $('#p-ref', modal.body).value, note: $('#p-note', modal.body).value } });
-        modal.close(); toast('Payout recorded'); payouts(panel);
+        const { reference } = await api('/admin/payouts', { method: 'POST', body: { restaurantId: r.restaurantId, amount: $('#p-amt', modal.body).value,
+          note: $('#p-note', modal.body).value } });
+        modal.close(); toast(`Payout ${reference} recorded`); payouts(panel);
       } catch (err) { showError($('#p-msg', modal.body), err); }
     }));
   };

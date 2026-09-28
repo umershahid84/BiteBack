@@ -145,6 +145,7 @@ CREATE TABLE IF NOT EXISTS terms_acceptances (
   ip TEXT NOT NULL DEFAULT '',
   user_agent TEXT NOT NULL DEFAULT ''
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payouts_reference ON payouts(reference) WHERE reference LIKE 'BBP-%';
 CREATE INDEX IF NOT EXISTS idx_terms_user ON terms_acceptances(user_id, document, version);
 
 CREATE INDEX IF NOT EXISTS idx_offers_status ON offers(status, pickup_end);

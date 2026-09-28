@@ -55,7 +55,7 @@ Log in at `/login` and you land on the console:
 | **Customers** | Customers, restaurant owners and admins, with orders, spend, no-shows and when they accepted the terms. **Suspend** (signs them out and blocks login) or reactivate. |
 | **Orders** | Every order, with search, status and date filters. **Cancel** an open order (releases the card hold), give a **full or partial refund** with a reason, download the receipt PDF, and export CSV. |
 | **Live offers** | Everything currently listed. **Remove** anything inappropriate. |
-| **Payouts** | What each restaurant has earned (food subtotal minus the food share of refunds), what's been paid, and the balance owed. Record payouts with a reference, see the history, and export CSV. |
+| **Payouts** | What each restaurant has earned (food subtotal minus the food share of refunds), what's been paid, and the balance owed. Record payouts with an automatic, unchangeable reference number (e.g. `BBP-20260928-000001`), see the history, and export CSV. |
 | **Sales tax** | Taxable sales and tax collected by city, ZIP and rate for your Washington excise tax return, with CSV export. |
 | **Settings** | Customer service fee %, default sales tax for new restaurants, and whether new restaurants need approval. |
 | **Audit log** | Every admin action: approvals, suspensions, refunds, payouts and settings changes, with who did it and when. |
