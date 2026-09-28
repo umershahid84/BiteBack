@@ -8,9 +8,9 @@ const { resolveArea } = require('../areas');
 
 const cardLabel = (c) => `${c.brand.toUpperCase()} •••• ${c.last4}`;
 
-module.exports = function customerRoutes({ db, payments, orders, receipts }) {
+module.exports = function customerRoutes({ db, payments, orders, receipts, terms }) {
   const router = express.Router();
-  router.use(requireRole('customer'));
+  router.use(requireRole('customer'), terms.gate);
 
   const offerColumns = `
     o.id, o.title, o.image_path, o.description, o.reason, o.dietary, o.original_price_cents, o.discount_pct,

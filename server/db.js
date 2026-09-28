@@ -105,6 +105,17 @@ CREATE TABLE IF NOT EXISTS orders (
   closed_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS terms_acceptances (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  document TEXT NOT NULL,
+  version TEXT NOT NULL,
+  accepted_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  ip TEXT NOT NULL DEFAULT '',
+  user_agent TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_terms_user ON terms_acceptances(user_id, document, version);
+
 CREATE INDEX IF NOT EXISTS idx_offers_status ON offers(status, pickup_end);
 CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_restaurant ON orders(restaurant_id, status);

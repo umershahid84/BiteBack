@@ -5,7 +5,7 @@ const { HttpError } = require('../errors');
 const { transaction } = require('../db');
 const { lookupZip, listAreas } = require('../areas');
 
-module.exports = function authRoutes({ db, config, sessions, payments }) {
+module.exports = function authRoutes({ db, config, sessions, payments, terms }) {
   const router = express.Router();
   const loginLimiter = createLimiter({ max: 10, windowMs: 15 * 60 * 1000 });
 
@@ -13,7 +13,7 @@ module.exports = function authRoutes({ db, config, sessions, payments }) {
   const findRestaurant = db.prepare('SELECT * FROM restaurants WHERE owner_user_id = ?');
 
   function publicUser(user) {
-    const out = { id: user.id, email: user.email, username: user.username, role: user.role };
+    const out = { id: user.id, email: user.email, username: user.username, role: user.role, pendingTerms: terms.pending(user) };
     if (user.role === 'restaurant') out.restaurant = findRestaurant.get(user.id) || null;
     return out;
   }
@@ -46,6 +46,12 @@ module.exports = function authRoutes({ db, config, sessions, payments }) {
     if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) throw new HttpError(409, 'An account with this email already exists.');
     if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) throw new HttpError(409, 'That user name is taken.');
 
+    // dryRun: validate the form before showing the agreement, without creating anything.
+    if (body.dryRun) return res.json({ ok: true });
+
+    // No account is created unless the current terms for this role were accepted.
+    terms.assertAccepted(role, body.acceptedTerms);
+
     const userId = transaction(db, () => {
       const { lastInsertRowid } = db
         .prepare('INSERT INTO users (email, username, password_hash, role) VALUES (?, ?, ?, ?)')
@@ -56,6 +62,7 @@ module.exports = function authRoutes({ db, config, sessions, payments }) {
           .run(lastInsertRowid, restaurant.name, restaurant.address, restaurant.city, restaurant.zip, restaurant.phone,
             restaurant.cuisine, restaurant.lat, restaurant.lng, config.defaultTaxRateBps);
       }
+      terms.record(Number(lastInsertRowid), role, req);
       return Number(lastInsertRowid);
     });
 
@@ -77,6 +84,17 @@ module.exports = function authRoutes({ db, config, sessions, payments }) {
     loginLimiter.reset(key);
     sessions.start(res, user.id);
     res.json({ user: publicUser(user) });
+  });
+
+  // Accepting updated terms (existing users, after a new version is published).
+  router.post('/accept-terms', (req, res) => {
+    if (!req.user) throw new HttpError(401, 'Please log in.');
+    terms.assertAccepted(req.user.role, req.body?.acceptedTerms);
+    const pending = terms.pending(req.user);
+    if (pending.length) {
+      transaction(db, () => terms.record(req.user.id, req.user.role, req));
+    }
+    res.json({ user: publicUser(req.user) });
   });
 
   router.post('/logout', (req, res) => {

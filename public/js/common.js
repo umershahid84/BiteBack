@@ -91,6 +91,7 @@ export async function renderHeader(active) {
       <button class="nav-toggle" aria-label="Menu" aria-expanded="false">☰</button>
       <nav class="nav">${links}</nav>
     </div>`;
+  if (user?.pendingTerms?.length) promptUpdatedTerms(user);
   const nav = $('.nav', el);
   $('.nav-toggle', el).addEventListener('click', (e) => {
     nav.classList.toggle('open');
@@ -100,6 +101,28 @@ export async function renderHeader(active) {
     await api('/auth/logout', { method: 'POST' });
     location.href = '/';
   });
+}
+
+// Existing users must accept updated terms before continuing; declining signs them out.
+let promptingTerms = false;
+async function promptUpdatedTerms(user) {
+  if (promptingTerms || location.pathname.startsWith('/legal/')) return;
+  promptingTerms = true;
+  const { askToAccept } = await import('./agreement.js');
+  const accepted = await askToAccept({
+    role: user.role,
+    title: 'Our terms have been updated',
+    intro: 'Please review and accept the updated terms to keep using BiteBack. If you decline, you will be signed out.',
+    acceptLabel: 'Accept & continue',
+    declineLabel: 'Decline & sign out',
+  });
+  if (accepted) {
+    await api('/auth/accept-terms', { method: 'POST', body: { acceptedTerms: accepted } });
+    location.reload();
+  } else {
+    await api('/auth/logout', { method: 'POST' });
+    location.href = '/';
+  }
 }
 
 let toastTimer;

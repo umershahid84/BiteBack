@@ -37,6 +37,20 @@ Customers can view it (My orders → View receipt), **print** it, or **download 
 
 **Automatic cleanup:** unfinished checkouts are released after 15 minutes. Orders not picked up within 10 minutes after the discard timer ends are released **without charging the customer**. Expired offers are closed.
 
+## Terms, agreement and privacy
+
+Sign-up has two steps. First the form is checked, then the **Customer Terms of Service + Privacy Policy** (customers) or the **Restaurant Partner Agreement + Privacy Policy** (restaurants) open in a dialog.
+
+- **Accepting:** the person must scroll to the end and tick "I have read and agree" before **Accept & create account** is enabled.
+- **Declining:** creates nothing.
+- **Server check:** the server refuses to create an account unless the current version of every required document is accepted.
+- **Record kept:** each acceptance is stored in `terms_acceptances` with the document, version, time, IP address and browser.
+- **Public pages:** the documents are at `/legal/customer-terms`, `/legal/restaurant-agreement` and `/legal/privacy` (printable).
+- **Updating the terms:** edit `server/legal/documents.js` and change `VERSION`. Every signed-in user is then asked to accept the new version, and declining signs them out.
+- **Company details:** set `LEGAL_ENTITY_NAME`, `SUPPORT_EMAIL` and `LEGAL_ADDRESS`.
+
+> The documents were written for a Washington State food marketplace, but they are not legal advice. Have a Washington-licensed attorney review them before launch. In particular, check the marketplace-facilitator tax wording, the insurance minimum and the dispute-resolution clause. The Partner Agreement promises weekly payouts through the payment processor, so Stripe Connect payouts must be built before launch.
+
 ## Payments: authorize now, charge at pickup
 
 Charging "at pickup" is done with a card **authorization** (hold) at checkout and a **capture** when the restaurant enters the PIN. This is the same approach hotels and gas stations use. It guarantees the funds are there without charging anyone for food they never collected. Customer cancellations and no-shows void the hold.

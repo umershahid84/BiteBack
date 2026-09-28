@@ -4,9 +4,9 @@ const { HttpError, bad } = require('../errors');
 const { requireRole, createLimiter } = require('../auth');
 const { lookupZip } = require('../areas');
 
-module.exports = function restaurantRoutes({ db, orders, images, receipts }) {
+module.exports = function restaurantRoutes({ db, orders, images, receipts, terms }) {
   const router = express.Router();
-  router.use(requireRole('restaurant'));
+  router.use(requireRole('restaurant'), terms.gate);
 
   // 4-digit PINs are guessable by brute force, so cap failed lookups per restaurant.
   const pinLimiter = createLimiter({ max: 15, windowMs: 10 * 60 * 1000 });
