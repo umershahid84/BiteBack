@@ -9,6 +9,7 @@ const { lookupZip } = require('./areas');
 const { createLegal } = require('./legal/documents');
 const { createTermsService } = require('./terms');
 const { createSettings } = require('./settings');
+const { createCipher } = require('./secure');
 
 const CSP = [
   "default-src 'self'",
@@ -49,7 +50,8 @@ function createApp({ db, config, payments }) {
   const settings = createSettings(db, config, { onChange: () => legal.refresh() });
   legal.refresh();
   const terms = createTermsService({ db, legal });
-  const deps = { db, config, payments, sessions, orders, images, receipts, legal, terms, settings };
+  const cipher = createCipher(config);
+  const deps = { db, config, payments, sessions, orders, images, receipts, legal, terms, settings, cipher };
 
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');

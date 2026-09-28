@@ -480,5 +480,13 @@ table.data tbody tr:hover { background: color-mix(in srgb, var(--surface-2) 60%,
 #daily-chart { position: relative; }
 .chart-tip { position: absolute; top: 8px; width: 180px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: .82rem; box-shadow: var(--shadow-lg); pointer-events: none; z-index: 2; }
 .restaurant-status { margin-bottom: 18px; }
-input.locked, input[readonly].locked { background: var(--surface-2); color: var(--primary-ink); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; letter-spacing: .03em; cursor: not-allowed; border-style: dashed; }
-input.locked:focus { box-shadow: none; border-color: var(--line); }
+input.locked, input[readonly].locked, textarea.locked { background: var(--surface-2); color: var(--primary-ink); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; letter-spacing: .03em; cursor: not-allowed; border-style: dashed; }
+input.locked:focus, textarea.locked:focus { box-shadow: none; border-color: var(--line); }
+
+/* ---------- Platform credit ---------- */
+.nav a.credit-chip { background: var(--accent-soft); color: var(--accent-ink); }
+.credit-box { border: 1.5px dashed color-mix(in srgb, var(--accent) 50%, var(--line)); border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+.credit-balance { font: 800 1.5rem var(--font-head); color: var(--accent-ink); }
+textarea.locked { min-height: 0; resize: none; font-size: .88rem; line-height: 1.5; }
+.pay-option span { line-height: 1.4; }
+.kpis-3 { grid-template-columns: repeat(3, 1fr); } @media (max-width: 700px) { .kpis-3 { grid-template-columns: 1fr; } }

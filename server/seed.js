@@ -10,6 +10,7 @@ const { hashPassword } = require('./auth');
 const { lookupZip } = require('./areas');
 const { createLegal } = require('./legal/documents');
 const { quote } = require('./pricing');
+const { createCipher } = require('./secure');
 
 const DEMO_PASSWORD = 'BiteBack123';
 
@@ -220,6 +221,18 @@ function main() {
               picked.toISOString(), created.toISOString(), picked.toISOString(), picked.toISOString());
         }
       }
+    }
+
+    // Demo payout bank accounts (test routing number 021000021) and some demo platform credit.
+    const cipher = createCipher(config);
+    for (const r of db.prepare('SELECT id, name FROM restaurants').all()) {
+      if (db.prepare('SELECT 1 FROM bank_accounts WHERE restaurant_id = ?').get(r.id)) continue;
+      const acct = String(100000000 + r.id * 7919).slice(0, 10);
+      db.prepare(`INSERT INTO bank_accounts (restaurant_id, holder_name, bank_name, account_type, routing_enc, account_enc, routing_last4, account_last4)
+                  VALUES (?, ?, 'Demo Bank', 'checking', ?, ?, '0021', ?)`).run(r.id, `${r.name} LLC`, cipher.encrypt('021000021'), cipher.encrypt(acct), acct.slice(-4));
+    }
+    if (!db.prepare('SELECT 1 FROM credit_ledger WHERE user_id = ?').get(demoId)) {
+      db.prepare("INSERT INTO credit_ledger (user_id, amount_cents, kind, note) VALUES (?, 1000, 'goodwill', 'Welcome credit (demo)')").run(demoId);
     }
 
     // Demo accounts have accepted the current terms (recorded like a real sign-up).

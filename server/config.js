@@ -19,6 +19,8 @@ module.exports = {
   legalAddress: process.env.LEGAL_ADDRESS || 'Seattle, Washington',
   // New restaurants must be approved by an admin before their offers are visible.
   requireRestaurantApproval: process.env.REQUIRE_RESTAURANT_APPROVAL !== 'false',
+  // 64 hex chars. Encrypts restaurant bank account numbers. Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  dataEncryptionKey: process.env.DATA_ENCRYPTION_KEY || '',
   timeZone: process.env.TIME_ZONE || 'America/Los_Angeles',
   port: int(process.env.PORT, 3000),
   uploadsDir: process.env.UPLOADS_DIR || path.join(__dirname, '..', 'data', 'uploads'),

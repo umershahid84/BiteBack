@@ -25,7 +25,7 @@ function setTitle() {
 setTitle();
 
 // ---------- Tabs ----------
-const panels = { pickup: renderPickup, offers: renderOffers, menu: renderMenu, orders: renderOrders, profile: renderProfile };
+const panels = { pickup: renderPickup, offers: renderOffers, menu: renderMenu, orders: renderOrders, payouts: renderPayouts, profile: renderProfile };
 let currentTab = 'pickup';
 function showTab(name) {
   currentTab = name;
@@ -470,6 +470,60 @@ async function renderOrders(panel) {
       <td><span class="status ${o.status}">${ORDER_LABELS[o.status] || o.status}</span></td>
       <td class="small">${fmtDateTime(o.pickedUpAt || o.createdAt)}</td></tr>`).join('')}</tbody></table></div>`
     : '<div class="empty"><h3>No orders yet</h3><p>Orders appear here as soon as customers reserve your food.</p></div>';
+}
+
+// ---------- Payouts & bank account ----------
+async function renderPayouts(panel) {
+  const [{ bank }, p] = await Promise.all([api('/restaurant/bank'), api('/restaurant/payouts')]);
+  panel.innerHTML = `
+    <div class="kpis kpis-3">
+      <div class="kpi"><b>${money(p.earnedCents)}</b><span>Earned (completed orders)</span></div>
+      <div class="kpi"><b>${money(p.paidCents)}</b><span>Paid to you</span></div>
+      <div class="kpi"><b>${money(p.balanceCents)}</b><span>Balance to be paid</span></div>
+    </div>
+    <div class="split">
+      <div class="card"><h3>🏦 Payout bank account</h3>
+        <div id="bank-view">${bank ? `
+          <p style="margin:0"><b>${esc(bank.bankName)}</b> · ${bank.accountType === 'savings' ? 'Savings' : 'Checking'} ••••${esc(bank.accountLast4)}<br>
+          <span class="muted small">Routing ••••${esc(bank.routingLast4)} · ${esc(bank.holderName)} · updated ${esc(fmtDateTime(bank.updatedAt))}</span></p>
+          <button class="btn btn-ghost btn-sm" id="bank-edit" style="margin-top:12px">Change bank account</button>`
+          : '<div class="alert alert-warn small">Add your bank account so BiteBack can pay you.</div>'}</div>
+        <form id="bank-form" class="${bank ? 'hidden' : ''}" novalidate autocomplete="off" style="margin-top:8px">
+          <div class="field"><label for="b-holder">Account holder name</label><input id="b-holder" value="${esc(bank?.holderName || restaurant.name)}"></div>
+          <div class="grid-2">
+            <div class="field"><label for="b-bank">Bank name</label><input id="b-bank" value="${esc(bank?.bankName || '')}" placeholder="e.g. Chase"></div>
+            <div class="field"><label for="b-type">Account type</label><select id="b-type"><option value="checking">Checking</option><option value="savings" ${bank?.accountType === 'savings' ? 'selected' : ''}>Savings</option></select></div>
+          </div>
+          <div class="field"><label for="b-routing">Routing number (9 digits)</label><input id="b-routing" inputmode="numeric" maxlength="9"></div>
+          <div class="grid-2">
+            <div class="field"><label for="b-acct">Account number</label><input id="b-acct" inputmode="numeric" maxlength="17" type="password"></div>
+            <div class="field"><label for="b-acct2">Confirm account number</label><input id="b-acct2" inputmode="numeric" maxlength="17"></div>
+          </div>
+          <p class="small muted">🔒 Encrypted and only visible to BiteBack for sending your payouts. See the <a href="/legal/restaurant-agreement" target="_blank">Partner Agreement</a>.</p>
+          <div id="b-msg"></div>
+          <button class="btn btn-primary" type="submit">Save bank account</button>
+        </form>
+      </div>
+      <div class="card"><h3>Payout history</h3>
+        ${p.history.length ? `<table class="data"><thead><tr><th>Date</th><th>Invoice number</th><th>Amount</th></tr></thead><tbody>
+          ${p.history.map((x) => `<tr><td class="small">${esc(fmtDateTime(x.paid_at))}</td><td><code>${esc(x.invoice_number)}</code>
+            <div class="muted small">${esc(x.bank_details)}${x.transaction_id ? ` · ${esc(x.transaction_id)}` : ''}</div></td><td><b>${money(x.amount_cents)}</b></td></tr>`).join('')}</tbody></table>`
+          : '<p class="muted">No payouts yet. Each payout shows an invoice number that matches the memo on your bank deposit.</p>'}
+      </div>
+    </div>`;
+  $('#bank-edit', panel)?.addEventListener('click', () => $('#bank-form', panel).classList.remove('hidden'));
+  $('#bank-form', panel).addEventListener('submit', (e) => {
+    e.preventDefault();
+    withBusy($('#bank-form button[type=submit]', panel), async () => {
+      try {
+        await api('/restaurant/bank', { method: 'PUT', body: {
+          holderName: $('#b-holder', panel).value, bankName: $('#b-bank', panel).value, accountType: $('#b-type', panel).value,
+          routingNumber: $('#b-routing', panel).value, accountNumber: $('#b-acct', panel).value, accountNumberConfirm: $('#b-acct2', panel).value } });
+        toast('Bank account saved');
+        renderPayouts(panel);
+      } catch (err) { showError($('#b-msg', panel), err); }
+    });
+  });
 }
 
 // ---------- Profile ----------

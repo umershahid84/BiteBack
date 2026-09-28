@@ -108,7 +108,50 @@ CREATE TABLE IF NOT EXISTS orders (
   closed_at TEXT,
   refunded_cents INTEGER NOT NULL DEFAULT 0,
   refunded_at TEXT,
-  refund_reason TEXT NOT NULL DEFAULT ''
+  refund_reason TEXT NOT NULL DEFAULT '',
+  credit_applied_cents INTEGER NOT NULL DEFAULT 0,
+  card_refunded_cents INTEGER NOT NULL DEFAULT 0,
+  credited_cents INTEGER NOT NULL DEFAULT 0
+);
+
+-- Refunds: 'original' = back to how the customer paid (card and/or credit they used);
+-- 'credit' = BiteBack platform credit (funded by BiteBack; the restaurant keeps its money).
+CREATE TABLE IF NOT EXISTS refunds (
+  id INTEGER PRIMARY KEY,
+  order_id INTEGER NOT NULL REFERENCES orders(id),
+  amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+  method TEXT NOT NULL CHECK (method IN ('original', 'credit')),
+  card_cents INTEGER NOT NULL DEFAULT 0,
+  credit_cents INTEGER NOT NULL DEFAULT 0,
+  reason TEXT NOT NULL,
+  provider_ref TEXT,
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- Platform credit ledger. Balance = SUM(amount_cents). Positive = issued/restored, negative = used.
+CREATE TABLE IF NOT EXISTS credit_ledger (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  amount_cents INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('refund', 'goodwill', 'redeem', 'restore', 'adjustment')),
+  order_id INTEGER REFERENCES orders(id),
+  note TEXT NOT NULL DEFAULT '',
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- Restaurant payout bank account. Routing/account numbers are encrypted (AES-256-GCM).
+CREATE TABLE IF NOT EXISTS bank_accounts (
+  restaurant_id INTEGER PRIMARY KEY REFERENCES restaurants(id) ON DELETE CASCADE,
+  holder_name TEXT NOT NULL,
+  bank_name TEXT NOT NULL,
+  account_type TEXT NOT NULL CHECK (account_type IN ('checking', 'savings')),
+  routing_enc TEXT NOT NULL,
+  account_enc TEXT NOT NULL,
+  routing_last4 TEXT NOT NULL,
+  account_last4 TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -123,7 +166,9 @@ CREATE TABLE IF NOT EXISTS payouts (
   reference TEXT NOT NULL DEFAULT '',
   note TEXT NOT NULL DEFAULT '',
   paid_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  created_by INTEGER REFERENCES users(id)
+  created_by INTEGER REFERENCES users(id),
+  bank_details TEXT NOT NULL DEFAULT '',
+  transaction_id TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -145,7 +190,9 @@ CREATE TABLE IF NOT EXISTS terms_acceptances (
   ip TEXT NOT NULL DEFAULT '',
   user_agent TEXT NOT NULL DEFAULT ''
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_payouts_reference ON payouts(reference) WHERE reference LIKE 'BBP-%';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payouts_invoice ON payouts(reference) WHERE reference LIKE 'INV-%';
+CREATE INDEX IF NOT EXISTS idx_credit_user ON credit_ledger(user_id);
+CREATE INDEX IF NOT EXISTS idx_refunds_order ON refunds(order_id);
 CREATE INDEX IF NOT EXISTS idx_terms_user ON terms_acceptances(user_id, document, version);
 
 CREATE INDEX IF NOT EXISTS idx_offers_status ON offers(status, pickup_end);
@@ -200,10 +247,21 @@ function migrate(db) {
     db.exec("ALTER TABLE restaurants ADD COLUMN status TEXT NOT NULL DEFAULT 'approved' CHECK (status IN ('pending', 'approved', 'suspended'))");
     db.exec("ALTER TABLE restaurants ADD COLUMN admin_note TEXT NOT NULL DEFAULT ''");
   }
+  for (const col of ['credit_applied_cents', 'card_refunded_cents', 'credited_cents']) {
+    if (has('orders', 'refunded_cents') && !has('orders', col)) db.exec(`ALTER TABLE orders ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (has('orders', 'refunded_cents') && has('orders', 'card_refunded_cents')) {
+    // Refunds made before refund methods existed went to the card.
+    db.exec('UPDATE orders SET card_refunded_cents = refunded_cents WHERE card_refunded_cents = 0 AND refunded_cents > 0');
+  }
+  for (const col of ['bank_details', 'transaction_id']) {
+    if (!has('payouts', col)) db.exec(`ALTER TABLE payouts ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
+  }
   if (!has('orders', 'refunded_cents')) {
     db.exec('ALTER TABLE orders ADD COLUMN refunded_cents INTEGER NOT NULL DEFAULT 0');
     db.exec('ALTER TABLE orders ADD COLUMN refunded_at TEXT');
     db.exec("ALTER TABLE orders ADD COLUMN refund_reason TEXT NOT NULL DEFAULT ''");
+    for (const col of ['credit_applied_cents', 'card_refunded_cents', 'credited_cents']) db.exec(`ALTER TABLE orders ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 0`);
   }
   if (!has('offers', 'menu_item_id')) db.exec('ALTER TABLE offers ADD COLUMN menu_item_id INTEGER REFERENCES menu_items(id)');
   if (!has('offers', 'image_path')) db.exec('ALTER TABLE offers ADD COLUMN image_path TEXT');

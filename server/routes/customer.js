@@ -98,6 +98,12 @@ module.exports = function customerRoutes({ db, payments, orders, receipts, terms
     res.json({ quote });
   });
 
+  // ---- Platform credit ----
+
+  router.get('/credit', (req, res) => {
+    res.json({ balanceCents: orders.credits.balance(req.user.id), history: orders.credits.history(req.user.id) });
+  });
+
   // ---- Saved cards ----
 
   const listCards = db.prepare(`SELECT id, brand, last4, exp_month, exp_year, is_default FROM payment_methods
@@ -175,6 +181,8 @@ module.exports = function customerRoutes({ db, payments, orders, receipts, terms
       itemTitle: o.item_title,
       imageUrl: db.prepare('SELECT image_path FROM offers WHERE id = ?').get(o.offer_id)?.image_path || null,
       refundedCents: o.refunded_cents || 0,
+      creditedCents: o.credited_cents || 0,
+      creditAppliedCents: o.credit_applied_cents || 0,
       quantity: o.quantity,
       unitPriceCents: o.unit_price_cents,
       originalUnitPriceCents: o.original_unit_price_cents,
@@ -198,19 +206,22 @@ module.exports = function customerRoutes({ db, payments, orders, receipts, terms
     const body = req.body || {};
     const offerId = Number(body.offerId);
     const quantity = v.int(body.quantity ?? 1, 'Quantity', { min: 1, max: 500 });
-    orders.quoteOffer(offerId, quantity); // validate before touching the payment provider
+    const { quote: q } = orders.quoteOffer(offerId, quantity); // validate before touching the payment provider
+    // Platform credit the customer chose to apply (checked against their balance when reserving).
+    const creditCents = body.creditCents ? v.int(Number(body.creditCents), 'Credit', { min: 0, max: q.totalCents }) : 0;
+    const needsCard = q.totalCents - creditCents > 0;
 
-    // Resolve which card to use.
-    let paymentRef;
-    let label;
-    let attached;
-    if (body.cardId) {
+    // Resolve which card to use (not needed when credit covers the whole total).
+    let paymentRef = null;
+    let label = null;
+    let attached = false;
+    if (needsCard && body.cardId) {
       const card = db.prepare('SELECT * FROM payment_methods WHERE id = ? AND user_id = ?').get(Number(body.cardId), req.user.id);
       if (!card) throw bad('Please choose a card.');
       paymentRef = card.provider_ref;
       label = cardLabel(card);
       attached = true;
-    } else if (body.newCard?.token) {
+    } else if (needsCard && body.newCard?.token) {
       const customerId = await ensureCustomer(req.user);
       const save = Boolean(body.newCard.save);
       const pm = await payments.resolvePaymentMethod({ customerId, token: body.newCard.token, save });
@@ -218,11 +229,11 @@ module.exports = function customerRoutes({ db, payments, orders, receipts, terms
       paymentRef = pm.ref;
       label = cardLabel(pm);
       attached = save;
-    } else {
+    } else if (needsCard) {
       throw bad('Please choose a card.');
     }
 
-    const { order } = orders.reserve({ userId: req.user.id, offerId, quantity, cardLabel: label });
+    const { order } = orders.reserve({ userId: req.user.id, offerId, quantity, cardLabel: label, creditCents });
     const auth = await orders.authorize(order, { customerId: req.user.payment_customer_id, paymentRef, attached });
     const fresh = orders.getOrder(order.id);
     res.status(201).json({

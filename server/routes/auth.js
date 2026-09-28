@@ -15,6 +15,7 @@ module.exports = function authRoutes({ db, config, sessions, payments, terms }) 
   function publicUser(user) {
     const out = { id: user.id, email: user.email, username: user.username, role: user.role, pendingTerms: terms.pending(user) };
     if (user.role === 'restaurant') out.restaurant = findRestaurant.get(user.id) || null;
+    if (user.role === 'customer') out.creditCents = db.prepare('SELECT COALESCE(SUM(amount_cents), 0) AS b FROM credit_ledger WHERE user_id = ?').get(user.id).b;
     return out;
   }
 

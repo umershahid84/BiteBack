@@ -25,8 +25,9 @@ function render(orders) {
   list.innerHTML = orders.map((o) => {
     const r = o.restaurant;
     const charged = o.status === 'picked_up'
-      ? `Charged ${money(o.totalCents)} to ${esc(o.cardLabel)}${o.refundedCents ? ` · Refunded ${money(o.refundedCents)}` : ''}`
-      : o.status === 'reserved' ? `Hold of ${money(o.totalCents)} on ${esc(o.cardLabel)}. Charged at pickup.`
+      ? `${o.creditAppliedCents ? `${money(o.creditAppliedCents)} paid with credit${o.totalCents > o.creditAppliedCents ? ` + ${money(o.totalCents - o.creditAppliedCents)} charged to ${esc(o.cardLabel)}` : ''}` : `Charged ${money(o.totalCents)} to ${esc(o.cardLabel)}`}${o.refundedCents ? ` · Refunded ${money(o.refundedCents)}` : ''}${o.creditedCents ? ` · ${money(o.creditedCents)} refunded as credit` : ''}`
+      : o.status === 'reserved' ? (o.creditAppliedCents >= o.totalCents ? `Paid with ${money(o.creditAppliedCents)} credit.`
+        : `Hold of ${money(o.totalCents - o.creditAppliedCents)} on ${esc(o.cardLabel)}${o.creditAppliedCents ? ` + ${money(o.creditAppliedCents)} credit` : ''}. Charged at pickup.`)
       : 'Hold released. You were not charged.';
     return `
     <div class="card">

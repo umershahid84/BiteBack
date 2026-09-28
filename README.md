@@ -52,15 +52,29 @@ Log in at `/login` and you land on the console:
 |---|---|
 | **Overview** | For any date range: BiteBack revenue (service fees), total charged, restaurant food sales, sales tax, orders, meals rescued, customer savings and refunds. Also a daily chart (with a table view), what's happening right now, and the top restaurants. |
 | **Restaurants** | Search and filter. **Approve** new restaurants (their offers stay hidden until approved), and **suspend** or reinstate restaurants with a note. |
-| **Customers** | Customers, restaurant owners and admins, with orders, spend, no-shows and when they accepted the terms. **Suspend** (signs them out and blocks login) or reactivate. |
-| **Orders** | Every order, with search, status and date filters. **Cancel** an open order (releases the card hold), give a **full or partial refund** with a reason, download the receipt PDF, and export CSV. |
+| **Customers** | Customers, restaurant owners and admins, with orders, spend, **platform credit balance**, no-shows and when they accepted the terms. **+ Credit** issues goodwill credit. **Suspend** (signs them out and blocks login) or reactivate. |
+| **Orders** | Every order, with search, status and date filters. **Cancel** an open order (releases the card hold). **Refund** by 10/25/50/75/100% or a manual amount, either to the **original form of payment** (shown, e.g. VISA •••• 4242 + credit) or as **BiteBack platform credit**. Download the receipt PDF and export CSV. |
 | **Live offers** | Everything currently listed. **Remove** anything inappropriate. |
-| **Payouts** | What each restaurant has earned (food subtotal minus the food share of refunds), what's been paid, and the balance owed. Record payouts with an automatic, unchangeable reference number (e.g. `BBP-20260928-000001`), see the history, and export CSV. |
+| **Payouts** | Each restaurant's bank account on file, what it has earned, what's been paid, and the balance owed. **Record payout** fills in a locked **invoice number** (`INV-20260928-000001`) and locked **bank/transaction details** (masked bank account plus a transaction ID). You can reveal the full account numbers to send the transfer; every reveal is logged. History and CSV export. |
 | **Sales tax** | Taxable sales and tax collected by city, ZIP and rate for your Washington excise tax return, with CSV export. |
 | **Settings** | Customer service fee %, default sales tax for new restaurants, and whether new restaurants need approval. |
 | **Audit log** | Every admin action: approvals, suspensions, refunds, payouts and settings changes, with who did it and when. |
 
 Suspended restaurants see a banner in their portal and can't post offers, but they can still verify pickups for existing orders. Pending restaurants can set up their menu while they wait for approval (`REQUIRE_RESTAURANT_APPROVAL`, on by default).
+
+### Refunds, platform credit and who pays
+
+| Refund method | Customer gets | Restaurant | BiteBack (you) |
+|---|---|---|---|
+| **Original form of payment** | Money back to their card. If they paid with credit, that part goes back to their credit balance. | Receives **nothing** for the refunded share (deducted from payouts). | Gives up the service fee on the refunded share. |
+| **Platform credit** | Credit on their BiteBack account. | Keeps its **full** payment. | **Pays for the credit.** |
+
+- **Using credit:** customers see their balance in the header ("🎁 $X credit") and on the Account page, with the full history.
+- **At checkout:** they choose how much credit to apply, and the card covers the rest (at least $0.50). If credit covers the whole order, no card is needed.
+- **Unused credit:** credit on an order that's cancelled or not picked up goes back to their balance.
+- **Restaurants:** when a customer pays with credit, the restaurant still earns the full food subtotal.
+
+**Bank accounts:** restaurants add their payout account in their portal (**Payouts** tab). Routing and account numbers are validated, including the routing checksum, then encrypted with AES-256-GCM and shown back only as the last 4 digits. In production, set `DATA_ENCRYPTION_KEY`. Without it, a key file is created at `data/encryption.key`: back it up, because losing it means the stored bank numbers can't be read.
 
 ## Terms, agreement and privacy
 
