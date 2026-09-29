@@ -118,8 +118,8 @@ export default function LandingPage() {
         <div className="container-page">
           <div className="mb-6 text-center">
             <span className="inline-flex rounded-full bg-primary-soft px-3 py-1.5 text-[0.8rem] font-bold text-primary-ink">▶ See it in action</span>
-            <h2 className="mt-3.5 text-[clamp(1.4rem,2.6vw,2rem)] font-extrabold">Watch BiteBack in under a minute</h2>
-            <p className="m-0 text-muted">A quick look at ordering a meal, and at the restaurant side.</p>
+            <h2 className="mt-3.5 text-[clamp(1.4rem,2.6vw,2rem)] font-extrabold">Watch BiteBack in about a minute</h2>
+            <p className="m-0 text-muted">A quick narrated tour of ordering a meal, and of the restaurant side. Turn your sound on.</p>
           </div>
           <DemoVideoShowcase />
         </div>
