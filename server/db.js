@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS orders (
   discount_pct INTEGER NOT NULL,
   subtotal_cents INTEGER NOT NULL,
   service_fee_cents INTEGER NOT NULL,
+  service_fee_bps INTEGER,
   tax_rate_bps INTEGER NOT NULL,
   tax_cents INTEGER NOT NULL,
   total_cents INTEGER NOT NULL,
@@ -264,6 +265,8 @@ function migrate(db) {
     for (const col of ['credit_applied_cents', 'card_refunded_cents', 'credited_cents']) db.exec(`ALTER TABLE orders ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 0`);
   }
   if (!has('offers', 'menu_item_id')) db.exec('ALTER TABLE offers ADD COLUMN menu_item_id INTEGER REFERENCES menu_items(id)');
+  // Service fee rate charged on the order (older orders leave it NULL).
+  if (!has('orders', 'service_fee_bps')) db.exec('ALTER TABLE orders ADD COLUMN service_fee_bps INTEGER');
   if (!has('offers', 'image_path')) db.exec('ALTER TABLE offers ADD COLUMN image_path TEXT');
 }
 

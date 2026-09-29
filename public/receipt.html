@@ -13,14 +13,14 @@
 <body>
 <header id="site-header" class="site-header no-print"></header>
 <main class="page">
-  <div class="container" style="max-width:760px">
+  <div class="container" style="max-width:520px">
     <div class="doc-toolbar no-print">
       <a class="btn btn-ghost btn-sm" href="/orders">← My orders</a><span class="spacer"></span>
       <button class="btn btn-ghost btn-sm" id="print-btn" type="button">🖨️ Print</button>
       <a class="btn btn-primary btn-sm" id="pdf-btn" href="#">⬇ Download PDF</a>
     </div>
     <div id="msg"></div>
-    <article class="paper" id="receipt" aria-live="polite"></article>
+    <div class="pos-shadow"><article class="pos" id="receipt" aria-live="polite"></article></div>
   </div>
 </main>
 <script type="module" src="/js/receipt.js"></script>
