@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="BiteBack">
+  <defs>
+    <linearGradient id="m-tile" x1="0" y1="0" x2="200" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#34D399"/>
+      <stop offset=".55" stop-color="#059669"/>
+      <stop offset="1" stop-color="#065F46"/>
+    </linearGradient>
+    <linearGradient id="m-leaf" x1="96" y1="20" x2="150" y2="70" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FDE047"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+    <mask id="m-b" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200">
+      <rect width="200" height="200" fill="#000"/>
+      <rect x="54" y="46" width="28" height="112" rx="14" fill="#fff"/>
+      <circle cx="108" cy="116" r="44" fill="#fff"/>
+      <circle cx="108" cy="116" r="18" fill="#000"/>
+      <circle cx="150" cy="88" r="14" fill="#000"/>
+      <circle cx="158" cy="112" r="12" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="200" height="200" rx="52" fill="url(#m-tile)"/>
+  <g transform="translate(6 -4)"><rect x="-6" y="4" width="200" height="200" fill="#fff" mask="url(#m-b)"/>
+  <path d="M76 50 C 84 26, 112 18, 132 24 C 126 46, 100 60, 76 50 Z" fill="url(#m-leaf)"/>
+  <path d="M82 48 C 96 40, 110 32, 124 28" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/></g>
+  </svg>
