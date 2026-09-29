@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { List, LocateFixed, Map as MapIcon } from 'lucide-react';
+import { DemoVideoButton } from '@/components/app/demo-video';
 import type { PaymentConfig } from '@/components/payments/card-entry';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -142,6 +143,7 @@ export function OffersBrowser({ map, payment }: { map: MapConfig; payment: Payme
           <p className="m-0 text-muted">Surplus food from local restaurants, discounted before it goes to waste. Updates live.</p>
         </div>
         <span className="flex-1" />
+        <DemoVideoButton tour="customer" label="How it works" />
         <div className="inline-flex rounded-full border border-line bg-surface p-1">
           {(['list', 'map'] as const).map((v) => (
             <button

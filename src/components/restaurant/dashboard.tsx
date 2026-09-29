@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Banknote, Bell, BellOff, ClipboardList, FileText, KeyRound, Plus, Store, Tag, UtensilsCrossed } from 'lucide-react';
+import { DemoVideoButton } from '@/components/app/demo-video';
 import type { MapConfig } from '@/components/offers/types';
 import { Alert } from '@/components/ui/alert';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -142,6 +143,7 @@ export function RestaurantDashboard({ restaurant, serviceFeeBps, map, paymentMod
           <p className="m-0 text-sm text-muted">{restaurant.address}, {restaurant.city} {restaurant.zip} · Sales tax {pct(restaurant.tax_rate_bps)}</p>
         </div>
         <span className="flex-1" />
+        <DemoVideoButton tour="restaurant" label="Watch the tour" />
         <Button variant="ghost" size="sm" onClick={toggleSound} className={soundOn ? '' : 'opacity-70'}>
           {soundOn ? <Bell /> : <BellOff />} Order sound: {soundOn ? 'on' : 'off'}
         </Button>

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { DemoVideoShowcase } from '@/components/app/demo-video';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -39,6 +40,7 @@ export default function LandingPage() {
               <Link href="/signup" className={buttonVariants({ size: 'lg' })}>Find deals near me →</Link>
               <Link href="/signup?role=restaurant" className={buttonVariants({ size: 'lg', variant: 'ghost' })}>I&apos;m a restaurant</Link>
             </div>
+            <a href="#video" className="mt-4 inline-flex items-center gap-1.5 text-[0.95rem] font-bold text-primary-ink hover:underline">▶ Watch a 1-minute video</a>
             <div className="mt-7 flex flex-wrap gap-5 text-[0.9rem] font-semibold text-muted">
               {['Free account', 'Pay only at pickup', 'Secure 4-digit PIN'].map((t) => (
                 <span key={t}><b className="mr-1.5 text-primary">✓</b>{t}</span>
@@ -109,6 +111,17 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section id="video" className="scroll-mt-24 py-10">
+        <div className="container-page">
+          <div className="mb-6 text-center">
+            <span className="inline-flex rounded-full bg-primary-soft px-3 py-1.5 text-[0.8rem] font-bold text-primary-ink">▶ See it in action</span>
+            <h2 className="mt-3.5 text-[clamp(1.4rem,2.6vw,2rem)] font-extrabold">Watch BiteBack in under a minute</h2>
+            <p className="m-0 text-muted">A quick look at ordering a meal, and at the restaurant side.</p>
+          </div>
+          <DemoVideoShowcase />
         </div>
       </section>
 
