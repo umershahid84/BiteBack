@@ -2,164 +2,111 @@
 
 # BiteBack: Reduce Food Waste
 
-BiteBack is a marketplace where restaurants in greater Seattle sell food that would otherwise be thrown away (wrong orders, delayed deliveries, orders nobody picked up, end-of-day surplus) at a discount they choose. Customers reserve it online and pick it up in person.
+BiteBack is a marketplace where restaurants in greater Seattle sell food that would otherwise be thrown away (wrong orders, delayed deliveries, orders nobody picked up, end-of-day surplus) at a discount they choose. Customers reserve it online, pay with a card hold, and pick it up with a 4-digit PIN. The card is charged only when the restaurant enters the PIN.
+
+## Tech stack
+
+| Area | What BiteBack uses |
+|---|---|
+| **Framework** | Next.js 16 (App Router, Server Components, Server Actions, Route Handlers, `proxy.ts`), TypeScript (strict) |
+| **Styling & UI** | Tailwind CSS v4, Lucide icons, shadcn-style primitives built on Radix UI (`src/components/ui`) |
+| **Database & Auth** | Supabase: PostgreSQL with **PostGIS**, **Row Level Security** on every table, **Supabase Auth** (email + password; log in with email or user name), Supabase Storage for food photos, `pg_cron` for cleanup |
+| **State & real-time** | TanStack Query for client data, **Supabase Realtime** channels (WebSockets) for the live offer feed, the restaurant's new-order bell and live order status |
+| **Payments** | **Stripe Connect** (Express accounts): manual-capture card holds as destination charges with a **platform application fee**, transfers, reversals and refunds. A built-in mock processor runs when no Stripe keys are set |
+| **Maps & location** | Leaflet with OpenStreetMap tiles, **PostGIS** spatial search (`ST_DWithin` / `ST_Distance` on `geography`), **haversine** distance in the browser, 186 Puget Sound ZIP codes |
+| **Documents** | pdfkit: 80 mm point-of-sale receipts and landscape daily reports; CSV exports |
+| **Tests** | Vitest: unit tests, integration tests against local Supabase (sign-up rules, RLS, checkout, pickup, refunds, payouts), Stripe request checks against `stripe-mock` |
 
 ## How it works
 
 **Customers**
-1. Sign up free with an **email, user name and password**.
-2. Browse deals nearby as a **list** or on an **interactive map** (zoom in/out, click a pin to see that restaurant's deals and order). Search by any city or ZIP code in King, Pierce, Thurston, Snohomish and Kitsap counties (Seattle, Des Moines, Kent, Federal Way, Tacoma, Fife, Olympia, Lacey, Puyallup, Everett, Bremerton and more), or use your location. Filter by dietary tags and distance, and sort by nearest, biggest discount, lowest price or ending soon. Each deal shows the restaurant, address, map link, why it's discounted, dietary tags, original vs. discounted price, quantity left and the pickup window.
-3. Choose a quantity. **Customers can't order more than the restaurant made available.** Then review the total before ordering: **food price + 5% service fee + WA sales tax = total**.
-4. Pay by debit/credit card. Cards can be **saved for future use** (managed on the Account page).
-5. A confetti "Congratulations!" screen shows the **4-digit PIN**. A hold is placed on the card for the total. **The card is only charged when the order is picked up.**
+1. Sign up free with an **email, user name and password**, after reading and accepting the Customer Terms and Privacy Policy. **Declining creates no account.**
+2. Browse deals as a **list** or on an **interactive map**, updated live. Search any city or ZIP code in King, Pierce, Thurston, Snohomish and Kitsap counties (Seattle, Des Moines, Kent, Federal Way, Tacoma, Fife, Olympia and more) or use your location, and filter by diet and distance.
+3. Choose a quantity (never more than the restaurant made available) and see the total before ordering: **food price + 5% service fee + WA sales tax**.
+4. Pay with a saved or new card, optionally using **BiteBack platform credit** (the card covers the rest, at least $0.50).
+5. A confetti screen shows the **4-digit PIN**. A hold is placed on the card; **it is charged only at pickup**. Cancel any time before pickup at no charge.
+6. Every order has a **point-of-sale receipt** (web, print and PDF).
 
 **Restaurants**
-1. Sign up as a restaurant (the same form, "I'm a restaurant" tab).
-2. Build your **Menu** with dish name, price, dietary tags and a **photo** (photos are resized in the browser before upload).
-3. Post surplus food by **choosing a dish from a drop-down of your menu**, then set the reason, **your discount %**, the quantity available and a **discard timer** (30 min, 1, 1½, 2, 3 or 4 hours, or a custom number of minutes). The food is available immediately.
-   - Customers see a live countdown, amber in the last 15 minutes.
-   - When the timer runs out, the offer disappears and the dashboard shows "🗑️ Discard N unsold".
-   - Use **+30m / +1h** to extend a running timer, or pause, edit or end the offer at any time.
-4. **New-order bell:** keep the dashboard open and it rings a counter bell ("ding-ding") and pops up the order the moment a customer orders. It uses a live Server-Sent Events connection. Browsers only allow sound after you click the page once, and the dashboard shows a reminder until you do. Sound can be switched off with the 🔔 button.
-5. When a customer arrives, enter their PIN under **Verify pickup**, check the order, then press **Hand over food & charge**. That captures the payment.
-6. The dashboard shows orders awaiting pickup, order history and meals rescued/sales.
+1. Sign up with the restaurant's details and accept the Restaurant Partner Agreement. New restaurants wait for owner approval (configurable).
+2. Build a **menu with photos**, then post surplus food by picking a dish, a reason, a discount, a quantity and a **discard timer** (+30m / +1h to extend; pause, edit or end any time).
+3. Keep the dashboard open: a **counter bell rings** and a pop-up appears the moment a customer orders (Supabase Realtime).
+4. **Verify pickup:** type the customer's PIN, check the order, press **Hand over food & charge**. The card is captured, and the restaurant's food subtotal goes to its **Stripe account** automatically.
+5. **Payouts tab:** connect Stripe (Express onboarding), see earnings and every transfer with its system-assigned **invoice number** and Stripe transaction ID.
+6. **Daily report:** sales, meals rescued, discounts, tax and every order for any day, with print, PDF and CSV.
 
-**Receipts:** every order has a full receipt showing:
-- the BiteBack logo and receipt number
-- the restaurant's name, address and phone, and the customer
-- the item, quantity, ~~original price~~, discount % and new price
-- savings, service fee, WA sales tax and total
-- the card used, payment status, amount charged and transaction ID
+**Owner console (`/admin`)**: overview with revenue and a daily chart, restaurant approvals and suspensions, customers (suspend, issue goodwill credit), orders (cancel, **refund by 10/25/50/75/100% or a set amount, to the original payment or as platform credit**, receipt PDF, CSV), live offer moderation, payouts (send what's owed through Stripe or record a manual payout, with a locked invoice number and bank/transaction details), sales tax by location (CSV for the WA excise tax return), settings (service fee, default tax, approval) and an audit log of every admin action.
 
-Customers can view it (My orders → View receipt), **print** it, or **download it as a PDF**.
+## Money flow
 
-**Daily report (restaurants):** Dashboard → 📄 Daily report. Pick a day to see food sales, orders picked up, meals rescued, discounts given, sales tax collected and total charged, plus every order. **Print** it, or download it as **PDF** or **CSV** (opens in Excel/Sheets). Days use Pacific Time (`TIME_ZONE`).
-
-**Automatic cleanup:** unfinished checkouts are released after 15 minutes. Orders not picked up within 10 minutes after the discard timer ends are released **without charging the customer**. Expired offers are closed.
-
-## Owner / admin console (`/admin/`)
-
-Admin accounts can't be created through sign-up. Create yours on the server:
-
-```bash
-npm run create-admin -- --email you@yourcompany.com --username owner
-# asks for a password (or set ADMIN_PASSWORD); run again to reset the password
-```
-
-Log in at `/login` and you land on the console:
-
-| Tab | What you can do |
-|---|---|
-| **Overview** | For any date range: BiteBack revenue (service fees), total charged, restaurant food sales, sales tax, orders, meals rescued, customer savings and refunds. Also a daily chart (with a table view), what's happening right now, and the top restaurants. |
-| **Restaurants** | Search and filter. **Approve** new restaurants (their offers stay hidden until approved), and **suspend** or reinstate restaurants with a note. |
-| **Customers** | Customers, restaurant owners and admins, with orders, spend, **platform credit balance**, no-shows and when they accepted the terms. **+ Credit** issues goodwill credit. **Suspend** (signs them out and blocks login) or reactivate. |
-| **Orders** | Every order, with search, status and date filters. **Cancel** an open order (releases the card hold). **Refund** by 10/25/50/75/100% or a manual amount, either to the **original form of payment** (shown, e.g. VISA •••• 4242 + credit) or as **BiteBack platform credit**. Download the receipt PDF and export CSV. |
-| **Live offers** | Everything currently listed. **Remove** anything inappropriate. |
-| **Payouts** | Each restaurant's bank account on file, what it has earned, what's been paid, and the balance owed. **Record payout** fills in a locked **invoice number** (`INV-20260928-000001`) and locked **bank/transaction details** (masked bank account plus a transaction ID). You can reveal the full account numbers to send the transfer; every reveal is logged. History and CSV export. |
-| **Sales tax** | Taxable sales and tax collected by city, ZIP and rate for your Washington excise tax return, with CSV export. |
-| **Settings** | Customer service fee %, default sales tax for new restaurants, and whether new restaurants need approval. |
-| **Audit log** | Every admin action: approvals, suspensions, refunds, payouts and settings changes, with who did it and when. |
-
-Suspended restaurants see a banner in their portal and can't post offers, but they can still verify pickups for existing orders. Pending restaurants can set up their menu while they wait for approval (`REQUIRE_RESTAURANT_APPROVAL`, on by default).
-
-### Refunds, platform credit and who pays
-
-| Refund method | Customer gets | Restaurant | BiteBack (you) |
+| | Customer pays | Restaurant receives | BiteBack keeps |
 |---|---|---|---|
-| **Original form of payment** | Money back to their card. If they paid with credit, that part goes back to their credit balance. | Receives **nothing** for the refunded share (deducted from payouts). | Gives up the service fee on the refunded share. |
-| **Platform credit** | Credit on their BiteBack account. | Keeps its **full** payment. | **Pays for the credit.** |
+| **Normal order** | food + 5% fee + tax (charged at pickup) | the food subtotal (Stripe transfer at pickup) | service fee + sales tax (which it remits as marketplace facilitator) |
+| **Paid partly with platform credit** | the rest by card | still the **full** food subtotal (BiteBack tops up from its balance) | pays for the credit |
+| **Refund to original payment** | money back to their card (credit part back to their balance) | gives up its share (the transfer is partially reversed) | gives up its fee share |
+| **Refund as platform credit** | credit for future orders | keeps its full payment | pays for the credit |
 
-- **Using credit:** customers see their balance in the header ("🎁 $X credit") and on the Account page, with the full history.
-- **At checkout:** they choose how much credit to apply, and the card covers the rest (at least $0.50). If credit covers the whole order, no card is needed.
-- **Unused credit:** credit on an order that's cancelled or not picked up goes back to their balance.
-- **Restaurants:** when a customer pays with credit, the restaurant still earns the full food subtotal.
-
-**Bank accounts:** restaurants add their payout account in their portal (**Payouts** tab). Routing and account numbers are validated, including the routing checksum, then encrypted with AES-256-GCM and shown back only as the last 4 digits. In production, set `DATA_ENCRYPTION_KEY`. Without it, a key file is created at `data/encryption.key`: back it up, because losing it means the stored bank numbers can't be read.
-
-## Terms, agreement and privacy
-
-Sign-up has two steps. First the form is checked, then the **Customer Terms of Service + Privacy Policy** (customers) or the **Restaurant Partner Agreement + Privacy Policy** (restaurants) open in a dialog.
-
-- **Accepting:** the person must scroll to the end and tick "I have read and agree" before **Accept & create account** is enabled.
-- **Declining:** creates nothing.
-- **Server check:** the server refuses to create an account unless the current version of every required document is accepted.
-- **Record kept:** each acceptance is stored in `terms_acceptances` with the document, version, time, IP address and browser.
-- **Public pages:** the documents are at `/legal/customer-terms`, `/legal/restaurant-agreement` and `/legal/privacy` (printable).
-- **Updating the terms:** edit `server/legal/documents.js` and change `VERSION`. Every signed-in user is then asked to accept the new version, and declining signs them out.
-- **Company details:** set `LEGAL_ENTITY_NAME`, `SUPPORT_EMAIL` and `LEGAL_ADDRESS`.
-
-> The documents were written for a Washington State food marketplace, but they are not legal advice. Have a Washington-licensed attorney review them before launch. In particular, check the marketplace-facilitator tax wording, the insurance minimum and the dispute-resolution clause. The Partner Agreement promises weekly payouts through the payment processor, so Stripe Connect payouts must be built before launch.
-
-## Payments: authorize now, charge at pickup
-
-Charging "at pickup" is done with a card **authorization** (hold) at checkout and a **capture** when the restaurant enters the PIN. This is the same approach hotels and gas stations use. It guarantees the funds are there without charging anyone for food they never collected. Customer cancellations and no-shows void the hold.
-
-- **Mock mode (default):** runs with no setup. No real money moves. Test card `4242 4242 4242 4242` (any future expiry, any CVC). `4000 0000 0000 0002` simulates a decline.
-- **Stripe mode:** set `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY` in `.env`. Card numbers are entered into Stripe Elements and go directly to Stripe; they never touch BiteBack servers, which keeps you in the lightest PCI scope (SAQ A). Saved cards are Stripe PaymentMethods attached to a Stripe Customer. 3-D Secure challenges are handled automatically.
-
-> Card holds normally last about 7 days, which is well beyond BiteBack's same-day pickup windows.
-
-## Pricing & tax
-
-| Line | Calculation |
-|---|---|
-| Food | original price × (1 − discount %) × quantity |
-| Service fee | 5% of food (`SERVICE_FEE_BPS=500`) |
-| WA sales tax | restaurant's rate × food (default 10.35%, the City of Seattle rate) |
-| **Total** | food + service fee + tax |
-
-Each restaurant sets its own combined state + local rate in **Profile & tax**, because WA rates differ by city (look one up at the [WA DOR rate lookup](https://dor.wa.gov/taxes-rates/sales-use-tax-rates/lookup-tax-rate)). Whether the service fee is taxable is controlled by `TAX_SERVICE_FEE`. Money is stored as integer cents, and every order stores a copy of its price breakdown.
-
-## Running it
-
-Requires **Node.js 22.13+** (uses the built-in `node:sqlite`; no database server needed).
-
-```bash
-npm install
-cp .env.example .env     # optional
-npm run seed             # optional: demo restaurants & deals around Seattle
-npm start                # http://localhost:3000
-npm test                 # API + pricing tests
-```
-
-Demo logins after seeding (password `BiteBack123`). The seed also adds two weeks of sample completed orders so the admin dashboard has data:
-- Owner/admin: `admin` (demo only; create your real admin with `npm run create-admin`)
-- Customer: `demo`
-- Restaurants (all fictional) in Seattle and the Eastside: `harborpho`, `ballardbread`, `caphilltacos`, `fremontpizza`, `bellevuecurry`, `redmondpoke`, `kirklandsushi`
-- Restaurants around the region: `desmoinesfish` (Des Moines), `kentteriyaki` and `kentpupusas` (Kent), `fedwaykbbq` and `fedwaybakery` (Federal Way), `tacomathai`, `tacomaburger` and `tacomatamales` (Tacoma), `fifepho` (Fife), `olympiacafe` and `olympiapizza` (Olympia), `laceycurry` (Lacey), `puyallupdeli` (Puyallup), `auburnnoodle` (Auburn), `rentontacos` (Renton), `burienmed` (Burien), `tukwilasushi` (Tukwila), `lakewoodsoul` (Lakewood), `everettbbq` (Everett), `lynnwoodgreens` (Lynnwood), `bremertonchowder` (Bremerton), `issaquahbakehouse` (Issaquah)
-
-**Food photos:** restaurants upload real photos in the Menu tab (dish → Edit → Choose photo). The demo dishes start without photos. To give them photos, put JPEGs you have the rights to in `public/assets/demo-food/`, named as in the `MENU` list in `server/seed.js` (e.g. `beef-pho.jpg`), then re-run `npm run seed` on a fresh database. Uploaded photos are stored in `data/uploads/` (set `UPLOADS_DIR` to change this). Back that folder up along with the database.
-
-**Map & service area:**
-- **Tiles:** maps use Leaflet with OpenStreetMap tiles (`MAP_TILE_URL`, `MAP_ATTRIBUTION`). OSM's free tile server is fine for development and light traffic. For a real launch, switch to a tile provider such as MapTiler, Stadia Maps or Mapbox, and set `MAP_DARK_FILTER=false` if you use a dark style.
-- **Restaurant pins:** a restaurant is pinned at its ZIP code's center when it signs up. The owner can drag the pin to the exact spot under Profile & tax.
-- **ZIP data:** `server/data/puget-sound-zips.json` lists 186 ZIP codes. ZIP list from USPS (via the MIT-licensed `zipcodes` package); coordinates © GeoNames (geonames.org), CC BY 4.0.
+With Stripe Connect, card holds are **destination charges** (`transfer_data.destination`) when the restaurant's Stripe account is ready. At capture BiteBack sets an **application fee** (service fee + tax), so Stripe moves the food subtotal to the restaurant. Restaurants that haven't connected Stripe yet are charged on the platform and paid later from the owner console.
 
 ## Project layout
 
 ```
-server/
-  index.js            start server + background cleanup every minute
-  app.js              Express app, security headers, CSRF guard
-  db.js               SQLite schema
-  auth.js             scrypt password hashing, cookie sessions, rate limiting
-  pricing.js          fee & tax math (integer cents)
-  orders.js           order lifecycle: reserve → authorize → pickup/capture | cancel/expire → void
-  payments/           stripe.js (real) and mock.js (development)
-  routes/             auth, customer (offers/cards/orders), restaurant (offers/pickup/stats)
-public/               static site (HTML/CSS/vanilla JS modules), logo in public/assets/
-test/                 node:test suites
+src/app/                 Pages (App Router), Server Actions (actions/), Route Handlers (api/)
+src/components/          UI: ui/ primitives, app/ shell, offers/, orders/, restaurant/, admin/, receipts/
+src/lib/                 Server & shared logic: supabase clients, auth, orders (checkout, pickup,
+                         refunds, payouts), payments (Stripe Connect + mock), receipts (PDF/CSV),
+                         admin data, legal documents, pricing, validation
+src/proxy.ts             Session refresh and sign-in redirects (Next.js 16's replacement for middleware)
+supabase/migrations/     Schema, RLS policies, business functions, ZIP data, storage/realtime/cron
+scripts/                 seed.ts (demo data), create-admin.ts
+tests/                   unit/ and integration/ (Vitest)
+assets/pdf-fonts/        Fonts embedded in PDFs
+legacy/                  The previous Express + SQLite version, kept for reference
 ```
 
-## Security notes
+### Security model
 
-- Passwords are hashed with scrypt. Sessions are random tokens (stored hashed) in `HttpOnly`, `SameSite=Lax` cookies. Set `COOKIE_SECURE=true` behind HTTPS.
-- Login attempts and PIN lookups are rate-limited (a 4-digit PIN could otherwise be brute-forced). PINs are unique among a restaurant's open orders, and only the customer who placed the order can see the PIN.
-- A strict Content-Security-Policy is set, all state-changing API calls require a custom header (CSRF protection), and all rendered text is HTML-escaped.
+- **Reads go through Row Level Security.** Customers see only their own orders, cards and credit; restaurants see only their own menu, offers, orders and payouts; anyone can see live offers of approved restaurants. **Pickup PINs live in a separate table that only the customer can read**, so staff must type the PIN the customer shows.
+- **Owners edit only safe columns** (column-level grants): a restaurant can change its address or tax rate, never its approval status; users can't change their role.
+- **Money and order state change only inside Postgres functions** (`reserve_order`, `finish_pickup`, `apply_refund`, `record_payout`, ...). Those are callable only by the server's secret key, after the server has checked who is asking. Offers are locked while reserving, so the last item can never be sold twice.
+- **Sign-up is enforced by a database trigger:** the account is created only if the current version of every required legal document was accepted, and sign-up can never create an admin.
+- Wrong PINs are rate-limited (15 per 10 minutes per restaurant); uploads are checked by file signature; Stripe webhooks are signature-verified; the cron route needs a bearer secret.
 
-## Before launching for real
+## Run it locally
 
-- **Restaurant payouts:** right now all charges land in the BiteBack Stripe account. Use **Stripe Connect** (destination charges with `application_fee_amount`) to pay restaurants their food sales automatically.
-- **Tax:** confirm with a WA CPA how marketplace-facilitator rules apply to you (who collects and remits the tax, and whether the service fee is taxable).
-- **Legal:** terms of service, a privacy policy and a food-safety/liability disclaimer (see the federal Bill Emerson Good Samaritan Food Donation Act and the 2023 Food Donation Improvement Act). Also confirm local health-department guidance on reselling surplus prepared food.
-- **Operations:** email verification and password reset (needs an email provider), HTTPS hosting, database backups, and a way to reach support.
+Requirements: Node.js 20.9+, Docker (for the local Supabase stack).
+
+```bash
+npm install
+npm run db:start          # starts Supabase locally (Postgres/PostGIS, Auth, Realtime, Storage) and applies migrations
+cp .env.example .env.local   # then paste the URL, publishable key and secret key printed by db:start
+npm run seed              # demo accounts, menus, live offers and two weeks of orders
+npm run dev               # http://localhost:3000
+```
+
+Demo logins (password `BiteBack123`): customer `demo`, owner `admin`, restaurants `harborpho`, `ballardbread`, `caphilltacos`, `fremontpizza`, `bellevuecurry`, `redmondpoke`, `kirklandsushi` (Stripe connected) and 22 more around the region (`tacomathai`, `olympiacafe`, `desmoinesfish`, ...). Test cards (mock mode): `4242 4242 4242 4242` works; `4000 0000 0000 0002` is declined.
+
+Create your real owner account (admins can't sign up on the website):
+
+```bash
+npm run create-admin -- --email you@yourcompany.com --username owner
+```
+
+Other commands: `npm run lint`, `npm run typecheck`, `npm test` (unit + integration; integration tests need `db:start`, and the Stripe checks need `docker run -d -p 12111:12111 stripe/stripe-mock`), `npm run db:reset` (fresh database), `npm run db:types` (regenerate `src/lib/database.types.ts` after changing migrations), `npm run build`.
+
+## Deploy
+
+1. **Supabase:** create a project, then `npx supabase link --project-ref <ref>` and `npx supabase db push` to apply the migrations. In Auth settings, set the Site URL, add `https://<your-site>/auth/confirm` as a redirect URL, and turn on **Confirm email**. Enable the `pg_cron` extension (Database → Extensions) before pushing, or schedule `/api/cron/sweep` instead.
+2. **Stripe:** turn on Connect (Express accounts). Add a webhook endpoint `https://<your-site>/api/stripe/webhook` for `account.updated` (connected accounts), `payment_intent.amount_capturable_updated` and `payment_intent.payment_failed`.
+3. **Vercel (or any Node host):** set the variables from `.env.example` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `NEXT_PUBLIC_SITE_URL`, Stripe keys, `STRIPE_WEBHOOK_SECRET`, `CRON_SECRET`, company details). `vercel.json` calls `/api/cron/sweep` every 5 minutes, which voids card holds of released orders.
+4. Create your owner account with `npm run create-admin` (pointing `.env.local` at the production project).
+
+Use a commercial map tile provider in production (`NEXT_PUBLIC_MAP_TILE_URL`). OpenStreetMap's public tiles are for light use only.
+
+## Legal documents
+
+Customer Terms, Restaurant Partner Agreement and Privacy Policy live in `src/lib/legal/documents.ts` (version `2026-09-29.1`, updated for Stripe Connect payouts and Supabase) and are shown at `/legal/...`. When you change the text, bump `LEGAL_VERSION` and add a migration updating `legal_documents`; a test checks they match. Signed-in users are then asked to accept the new version (declining signs them out). Have a Washington-licensed attorney review them before launch.
+
+## Upgrading from the first version
+
+The original Express + SQLite app is in `legacy/` for reference. Its demo data isn't migrated: run `npm run seed` for fresh demo data. Everyone accepts the updated terms (new version) on first sign-in.

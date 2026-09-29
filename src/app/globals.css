@@ -1,0 +1,177 @@
+@import 'tailwindcss';
+
+/* BiteBack design tokens: dark emerald surfaces with amber accents. */
+@theme {
+  --color-bg: #07110d;
+  --color-bg-2: #0b1813;
+  --color-surface: #0f1c16;
+  --color-surface-2: #16271f;
+  --color-ink: #ecfdf5;
+  --color-ink-2: #b4c6bd;
+  --color-muted: #86998f;
+  --color-line: #213629;
+  --color-primary: #10b981;
+  --color-primary-600: #059669;
+  --color-primary-soft: #0b3a2a;
+  --color-primary-ink: #6ee7b7;
+  --color-accent: #f59e0b;
+  --color-accent-soft: #3b2a0a;
+  --color-accent-ink: #fcd34d;
+  --color-danger: #f87171;
+  --color-danger-soft: #3a1414;
+
+  --font-sans: var(--font-inter), system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-heading: var(--font-jakarta), var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --radius-card: 22px;
+  --radius-field: 14px;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px -8px rgba(0, 0, 0, 0.55);
+  --shadow-pop: 0 2px 4px rgba(0, 0, 0, 0.4), 0 24px 48px -12px rgba(0, 0, 0, 0.75);
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-bg text-ink antialiased;
+    background-image:
+      radial-gradient(900px 500px at 85% -10%, rgba(16, 185, 129, 0.1), transparent 60%),
+      radial-gradient(700px 400px at -10% 30%, rgba(245, 158, 11, 0.06), transparent 60%);
+    background-attachment: fixed;
+  }
+  h1, h2, h3, h4 {
+    @apply font-heading tracking-tight;
+  }
+  a {
+    @apply text-primary;
+  }
+  ::selection {
+    background: rgba(16, 185, 129, 0.35);
+  }
+}
+
+@utility container-page {
+  width: min(1180px, 100% - 32px);
+  margin-inline: auto;
+}
+
+@utility grad-text {
+  background: linear-gradient(135deg, #34d399 0%, #059669 55%, #047857 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility bg-grad {
+  background: linear-gradient(135deg, #34d399 0%, #059669 55%, #047857 100%);
+}
+
+@utility bg-grad-warm {
+  background: linear-gradient(135deg, #fde047 0%, #f59e0b 100%);
+}
+
+/* Leaflet: darken light map tiles to match the UI, and style pins/popups. */
+.dark-tiles .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9) saturate(0.6);
+}
+.leaflet-container {
+  background: #0b1813;
+  font-family: var(--font-sans);
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--color-surface) !important;
+  color: var(--color-ink) !important;
+  border: 1px solid var(--color-line);
+}
+.leaflet-popup-content {
+  margin: 12px 14px !important;
+}
+.leaflet-control-attribution {
+  background: rgba(7, 17, 13, 0.75) !important;
+  color: var(--color-muted) !important;
+}
+.leaflet-control-attribution a {
+  color: var(--color-ink-2) !important;
+}
+.map-pin {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--color-surface);
+  border: 2px solid var(--color-primary);
+  color: var(--color-ink);
+  border-radius: 999px;
+  padding: 3px 9px 3px 5px;
+  font: 800 13px var(--font-sans);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+  width: max-content;
+}
+.map-pin b {
+  color: var(--color-primary-ink);
+}
+.map-pin i {
+  font-style: normal;
+  background: var(--color-accent);
+  color: #1c1300;
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
+/* ---------- Point-of-sale receipt (80 mm thermal roll) ---------- */
+.pos-shadow { filter: drop-shadow(0 14px 28px rgba(0, 0, 0, .45)); margin: 6px auto 28px; max-width: 360px; }
+/* Torn, zig-zag top and bottom edges like paper pulled off a receipt printer. */
+.pos { --zz: 10px; width: 100%; background: #fff; color: #111;
+  font: 400 12.5px/1.45 var(--font-mono); padding: 30px 20px 34px;
+  -webkit-mask: conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / var(--zz) 51% repeat-x,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / var(--zz) 51% repeat-x;
+  mask: conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / var(--zz) 51% repeat-x,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / var(--zz) 51% repeat-x; }
+.pos .b { font-weight: 700; }
+.pos .pos-center { text-align: center; }
+.pos .pos-logo { height: 44px; display: block; margin: 0 auto 4px; }
+.pos .pos-tag { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 10px; }
+.pos .pos-store { font-weight: 700; font-size: 15px; text-transform: uppercase; }
+.pos hr { border: 0; margin: 9px 0; }
+.pos .pos-dash { border-top: 1.5px dashed #111; }
+.pos .pos-double { border-top: 3px double #111; margin: 10px 0 8px; }
+.pos .pos-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; text-transform: uppercase; }
+.pos .pos-row > span:last-child { white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+.pos .pos-row.b { font-weight: 700; }
+.pos .pos-row.item { text-transform: none; font-size: 13px; }
+.pos .pos-row.sub { text-transform: none; font-size: 11.5px; padding-left: 18px; }
+.pos .pos-row.total { font-weight: 700; font-size: 19px; margin: 2px 0; }
+.pos .pos-note { font-size: 11px; padding-left: 18px; }
+.pos .pos-note.flush { padding-left: 0; }
+.pos .pos-note.break { word-break: break-all; }
+.pos s { text-decoration-thickness: 1.5px; }
+.pos .small-print { font-size: 10.5px; }
+.pos p.small-print { margin: 6px 0; line-height: 1.4; }
+.pos .pos-saved { background: #111; color: #fff; text-align: center; font-weight: 700; text-transform: uppercase; padding: 5px 4px; margin: 10px 0 6px; }
+.pos .pos-spaced { letter-spacing: .18em; }
+.pos .pos-pin { display: inline-block; border: 2px solid #111; font: 700 30px/1 var(--font-mono); letter-spacing: .35em; padding: 8px 6px 8px 18px; margin: 6px 0; }
+.pos .pos-barcode { display: block; width: 100%; height: 52px; fill: #111; margin: 4px 0 2px; }
+.pos .pos-thanks { text-transform: uppercase; margin-top: 12px; font-size: 13px; }
+@media print {
+  .pos-shadow { filter: none; margin: 0 auto; max-width: 72mm; }
+  .pos { padding: 0; font-size: 10.5px; -webkit-mask: none; mask: none; }
+  .pos .pos-saved { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+
+/* Printing: only the document (receipt/report/legal text) is printed. */
+@media print {
+  @page {
+    margin: 12mm;
+  }
+  body {
+    background: #fff !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

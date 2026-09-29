@@ -1,4 +1,31 @@
+# dependencies
 node_modules/
+
+# Next.js
+/.next/
+/out/
+/build
+next-env.d.ts
+*.tsbuildinfo
+
+# testing
+/coverage
+/test-results/
+/playwright-report/
+
+# env files (.env.example is committed)
+.env*
+!.env.example
+
+# Supabase local state
+supabase/.branches
+supabase/.temp
+
+# legacy app's local data (database, encryption key)
 /data/
-.env
+
+# misc
+.DS_Store
+*.pem
 *.log
+.vercel
