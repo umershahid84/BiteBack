@@ -7,6 +7,8 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54
 const trustedOrigins = (process.env.TRUSTED_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 
 const nextConfig: NextConfig = {
+  // scripts/server/update.sh builds into a separate folder while the live site keeps running from .next.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   // pdfkit reads its font metrics from disk, so it must not be bundled.
   serverExternalPackages: ['pdfkit'],
   // Fonts for PDF receipts and reports are read at runtime.

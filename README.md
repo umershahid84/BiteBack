@@ -98,6 +98,33 @@ npm run create-admin -- --email you@yourcompany.com --username owner
 
 Other commands: `npm run lint`, `npm run typecheck`, `npm test` (unit + integration; integration tests need `db:start`, and the Stripe checks need `docker run -d -p 12111:12111 stripe/stripe-mock`), `npm run db:reset` (fresh database), `npm run db:types` (regenerate `src/lib/database.types.ts` after changing migrations), `npm run build`.
 
+## Keep it running on your own server (systemd)
+
+`npm start` stops when the terminal that started it closes (for example when you close VS Code). On a Linux server, install BiteBack as a **systemd service** instead: it keeps running after you log out, restarts itself if it crashes, and starts when the server boots.
+
+**One-time setup** (from the app folder, as your normal user, with `.env.local` filled in):
+
+```bash
+npm run service:install        # asks for your sudo password; builds the app the first time
+sudo systemctl start biteback
+```
+
+The installer uses your user account and your Node.js (nvm works), and serves on port 3000. Change it with `npm run service:install -- --port 8080`; running the installer again updates the service.
+
+| To... | Run |
+|---|---|
+| Start / stop / restart | `sudo systemctl start biteback` / `stop` / `restart` |
+| See if it's running | `systemctl status biteback` |
+| Follow the logs | `sudo journalctl -u biteback -f` |
+| Turn off starting at boot | `sudo systemctl disable biteback` |
+| **Deploy the latest code** | `npm run update` |
+
+**`npm run update`** pulls the latest code, runs `npm ci` if packages changed, and builds the new version **while the site keeps running**. Then it swaps the new build in and restarts, so the site is down for about a second. If the new version doesn't answer, the previous one is put back automatically. If nothing new was pushed, it says so and does nothing. When an update includes database migrations, it reminds you to run `npx supabase db push`.
+
+Don't run `npm start` or `npm run build` in the same folder while the service is running: that would replace the build it is serving. Use `npm run dev` for development, `npm run update` to deploy.
+
+systemd is Linux-only. On Windows, use WSL 2 with systemd turned on, or run the app on a Linux server or VM.
+
 ## Deploy
 
 1. **Supabase:** create a project, then `npx supabase link --project-ref <ref>` and `npx supabase db push` to apply the migrations. In Auth settings, set the Site URL, add `https://<your-site>/auth/confirm` as a redirect URL, and turn on **Confirm email**. Enable the `pg_cron` extension (Database → Extensions) before pushing, or schedule `/api/cron/sweep` instead.

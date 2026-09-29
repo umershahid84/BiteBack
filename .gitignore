@@ -3,6 +3,9 @@ node_modules/
 
 # Next.js
 /.next/
+/.next-build/
+/.next-old/
+/.next-failed/
 /out/
 /build
 next-env.d.ts

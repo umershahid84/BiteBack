@@ -1,0 +1,31 @@
+# systemd service for BiteBack. Install it with: sudo bash scripts/server/install-service.sh
+# (the installer fills in the @...@ values). Then: sudo systemctl start biteback
+[Unit]
+Description=BiteBack (Next.js)
+Documentation=file://@APP_DIR@/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@APP_USER@
+Group=@APP_GROUP@
+WorkingDirectory=@APP_DIR@
+# Secrets and settings come from .env.local in the app folder, as with npm start.
+Environment=NODE_ENV=production
+Environment=PORT=@PORT@
+Environment=PATH=@NODE_DIR@:/usr/local/bin:/usr/bin:/bin
+ExecStart=@NODE_BIN@ @APP_DIR@/node_modules/next/dist/bin/next start --port ${PORT} --hostname @HOST@
+# Start again if it crashes; give in-flight requests time to finish on stop/restart.
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+SyslogIdentifier=biteback
+# Hardening: no privilege escalation, a private /tmp, and read-only system folders.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
