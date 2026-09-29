@@ -84,6 +84,8 @@ npm run seed              # demo accounts, menus, live offers and two weeks of o
 npm run dev               # http://localhost:3000
 ```
 
+Opening the app through a tunnel or proxy (e.g. VS Code port forwarding, `*.devtunnels.ms`)? Add `TRUSTED_ORIGINS=*.devtunnels.ms,localhost:3000` to `.env.local` and restart (rebuild first if you use `npm start`); otherwise Next.js blocks log-in and other forms as cross-site requests.
+
 Demo logins (password `BiteBack123`): customer `demo`, owner `admin`, restaurants `harborpho`, `ballardbread`, `caphilltacos`, `fremontpizza`, `bellevuecurry`, `redmondpoke`, `kirklandsushi` (Stripe connected) and 22 more around the region (`tacomathai`, `olympiacafe`, `desmoinesfish`, ...). Test cards (mock mode): `4242 4242 4242 4242` works; `4000 0000 0000 0002` is declined.
 
 Create your real owner account (admins can't sign up on the website):
