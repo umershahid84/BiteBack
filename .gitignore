@@ -29,3 +29,6 @@ supabase/.temp
 *.pem
 *.log
 .vercel
+
+# raw demo-video recordings
+/.video-tmp

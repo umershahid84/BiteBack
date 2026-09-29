@@ -35,6 +35,8 @@ BiteBack is a marketplace where restaurants in greater Seattle sell food that wo
 5. **Payouts tab:** connect Stripe (Express onboarding), see earnings and every transfer with its system-assigned **invoice number** and Stripe transaction ID.
 6. **Daily report:** sales, meals rescued, discounts, tax and every order for any day, with print, PDF and CSV.
 
+**Demo videos:** short silent walkthroughs for customers and restaurants play on the home page ("See it in action"), behind **How it works** on the deals page and **Watch the tour** on the restaurant dashboard. They live in `public/videos/` and are re-recorded with `node scripts/record-demo-videos.mjs` (instructions at the top of the script).
+
 **Owner console (`/admin`)**: overview with revenue and a daily chart, restaurant approvals and suspensions, customers (suspend, issue goodwill credit), orders (cancel, **refund by 10/25/50/75/100% or a set amount, to the original payment or as platform credit**, receipt PDF, CSV), live offer moderation, payouts (send what's owed through Stripe or record a manual payout, with a locked invoice number and bank/transaction details), sales tax by location (CSV for the WA excise tax return), settings (service fee, default tax, approval) and an audit log of every admin action.
 
 ## Money flow
