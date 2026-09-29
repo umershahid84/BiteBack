@@ -1,6 +1,7 @@
 // Customer receipts and restaurant daily reports: JSON for the web pages, plus PDF and CSV downloads.
 const path = require('node:path');
 const PDFDocument = require('pdfkit');
+const { code128 } = require('./code128');
 
 const ROOT = path.join(__dirname, '..', 'public');
 // WOFF (not WOFF2): pdfkit's font subsetter can fail on WOFF2 input.
@@ -10,12 +11,17 @@ const FONTS = {
   medium: path.join(FONT_DIR, 'inter-latin-600-normal.woff'),
   bold: path.join(FONT_DIR, 'inter-latin-700-normal.woff'),
   head: path.join(FONT_DIR, 'plus-jakarta-sans-latin-800-normal.woff'),
+  mono: path.join(FONT_DIR, 'IBMPlexMono-Regular.woff'),
+  monoMedium: path.join(FONT_DIR, 'IBMPlexMono-SemiBold.woff'),
+  monoBold: path.join(FONT_DIR, 'IBMPlexMono-Bold.woff'),
 };
 const LOGO = path.join(ROOT, 'assets', 'logo.png');
 const GREEN = '#047857';
 const INK = '#0b1b14';
 const MUTED = '#6b7b73';
 const LINE = '#dfe7e2';
+const ROLL_WIDTH = 226.77; // 80 mm receipt roll
+const ROLL_MARGIN = 14;
 
 const money = (cents) => `${cents < 0 ? '-' : ''}$${(Math.abs(cents) / 100).toFixed(2)}`;
 const pctText = (bps) => `${(bps / 100).toFixed(2).replace(/\.?0+$/, '')}%`;
@@ -106,7 +112,9 @@ function createReceiptService({ db, config }) {
       },
       subtotalCents: order.subtotal_cents,
       serviceFeeCents: order.service_fee_cents,
-      serviceFeePct: order.subtotal_cents ? Math.round((order.service_fee_cents * 1000) / order.subtotal_cents) / 10 : 0,
+      // Older orders didn't store the fee rate, so estimate it from the amounts.
+      serviceFeePct: order.service_fee_bps != null ? order.service_fee_bps / 100
+        : order.subtotal_cents ? Math.round((order.service_fee_cents * 1000) / order.subtotal_cents) / 10 : 0,
       taxRateBps: order.tax_rate_bps,
       taxCents: order.tax_cents,
       totalCents: order.total_cents,
@@ -125,141 +133,22 @@ function createReceiptService({ db, config }) {
       card: order.card_label,
       paymentRef: order.payment_ref || '',
       pin: order.status === 'reserved' ? order.pin : null,
+      // Code 128 module widths (bar, space, ...) for the receipt number barcode.
+      barcode: code128(`BB-${ymd}-${String(order.id).padStart(6, '0')}`),
       timeZone,
     };
   }
 
+  // Point-of-sale style receipt: an 80 mm thermal roll, as tall as the content needs.
   function receiptPdf(rc) {
-    const doc = new PDFDocument({ size: 'LETTER', margin: 54, info: { Title: `BiteBack receipt ${rc.receiptNumber}`, Author: 'BiteBack' } });
+    const info = { Title: `BiteBack receipt ${rc.receiptNumber}`, Author: 'BiteBack' };
+    // First pass measures the height, second pass draws on a page cut to fit.
+    const probe = new PDFDocument({ size: [ROLL_WIDTH, 5000], margin: 0, autoFirstPage: true });
+    fonts(probe);
+    const height = Math.ceil(drawPosReceipt(probe, rc) + ROLL_MARGIN);
+    const doc = new PDFDocument({ size: [ROLL_WIDTH, height], margin: 0, info });
     fonts(doc);
-    const L = 54;
-    const R = doc.page.width - 54;
-    const W = R - L;
-
-    doc.image(LOGO, L, 48, { height: 44 });
-    doc.font('head').fontSize(22).fillColor(INK).text('Receipt', L, 52, { width: W, align: 'right' });
-    doc.font('regular').fontSize(9.5).fillColor(MUTED).text(rc.receiptNumber, L, 80, { width: W, align: 'right' });
-    rule(doc, L, R, 110);
-
-    // Restaurant / customer columns
-    let y = 124;
-    const col = W / 2;
-    label(doc, 'RESTAURANT', L, y);
-    label(doc, 'CUSTOMER', L + col, y);
-    y += 14;
-    doc.font('bold').fontSize(11.5).fillColor(INK).text(rc.restaurant.name, L, y, { width: col - 10 });
-    doc.text(rc.customer.username, L + col, y, { width: col });
-    y += 16;
-    doc.font('regular').fontSize(9.5).fillColor(MUTED);
-    doc.text(`${rc.restaurant.address}\n${rc.restaurant.city}, WA ${rc.restaurant.zip}${rc.restaurant.phone ? `\n${rc.restaurant.phone}` : ''}`, L, y, { width: col - 10 });
-    doc.text(rc.customer.email, L + col, y, { width: col });
-    y += 50;
-
-    // Order facts
-    const facts = [
-      ['Order #', String(rc.orderId)],
-      ['Ordered', rc.orderedAtText],
-      [rc.status === 'picked_up' ? 'Picked up' : 'Pick up by', rc.status === 'picked_up' ? rc.pickedUpAtText : rc.pickupByText],
-      ['Status', rc.statusLabel],
-    ];
-    const fw = W / facts.length;
-    doc.roundedRect(L, y, W, 46, 8).fill('#f2f7f4');
-    facts.forEach(([k, v], i) => {
-      label(doc, k.toUpperCase(), L + 12 + i * fw, y + 9);
-      doc.font('medium').fontSize(10).fillColor(INK).text(v, L + 12 + i * fw, y + 23, { width: fw - 16 });
-    });
-    y += 66;
-
-    // Item table
-    const cols = [
-      ['Item', L, 190, 'left'], ['Qty', L + 190, 40, 'right'], ['Original', L + 230, 72, 'right'],
-      ['Discount', L + 302, 62, 'right'], ['Price', L + 364, 70, 'right'], ['Amount', L + 434, W - 434, 'right'],
-    ];
-    cols.forEach(([h, x, w, a]) => label(doc, h.toUpperCase(), x, y, { width: w, align: a }));
-    y += 16;
-    rule(doc, L, R, y);
-    y += 10;
-    const it = rc.item;
-    doc.font('bold').fontSize(10.5).fillColor(INK).text(it.title, L, y, { width: 185 });
-    const rowH = Math.max(doc.heightOfString(it.title, { width: 185 }), 14);
-    doc.font('regular').fontSize(10.5).text(String(it.quantity), L + 190, y, { width: 40, align: 'right' });
-    const orig = money(it.originalUnitCents);
-    doc.fillColor(MUTED).text(orig, L + 230, y, { width: 72, align: 'right' });
-    const ow = doc.widthOfString(orig);
-    doc.moveTo(L + 302 - ow, y + 6).lineTo(L + 302, y + 6).lineWidth(0.8).strokeColor(MUTED).stroke();
-    doc.fillColor(GREEN).font('bold').text(`-${it.discountPct}%`, L + 302, y, { width: 62, align: 'right' });
-    doc.fillColor(INK).text(money(it.unitPriceCents), L + 364, y, { width: 70, align: 'right' });
-    doc.text(money(it.lineTotalCents), L + 434, y, { width: W - 434, align: 'right' });
-    y += rowH + 4;
-    doc.font('regular').fontSize(9).fillColor(GREEN).text(`You saved ${money(it.savingsCents)} (${it.discountPct}% off ${money(it.lineOriginalCents)})`, L, y);
-    y += 20;
-    rule(doc, L, R, y);
-    y += 12;
-
-    // Totals
-    const tx = L + W / 2;
-    const tw = W / 2;
-    const totalRow = (k, v, opts = {}) => {
-      doc.font(opts.bold ? 'bold' : 'regular').fontSize(opts.size || 10.5).fillColor(opts.color || INK);
-      doc.text(k, tx, y, { width: tw * 0.6 });
-      doc.text(v, tx + tw * 0.6, y, { width: tw * 0.4, align: 'right' });
-      y += (opts.size || 10.5) + 9;
-    };
-    totalRow('Menu value', money(it.lineOriginalCents), { color: MUTED });
-    totalRow(`Discount (${it.discountPct}%)`, money(-it.savingsCents), { color: GREEN });
-    totalRow('Food subtotal', money(rc.subtotalCents));
-    totalRow(`Service fee (${rc.serviceFeePct}%)`, money(rc.serviceFeeCents));
-    totalRow(`WA sales tax (${pctText(rc.taxRateBps)})`, money(rc.taxCents));
-    rule(doc, tx, R, y - 3);
-    y += 4;
-    totalRow('Total', money(rc.totalCents), { bold: true, size: 14 });
-    if (rc.creditAppliedCents) {
-      totalRow('Paid with platform credit', money(-rc.creditAppliedCents), { color: GREEN });
-      totalRow('Paid by card', money(rc.totalCents - rc.creditAppliedCents), { bold: true });
-    }
-    y += 6;
-
-    // Payment block
-    doc.roundedRect(L, y, W, 78, 8).lineWidth(1).strokeColor(LINE).stroke();
-    label(doc, 'PAYMENT', L + 14, y + 12);
-    const pay = [
-      ['Paid with', rc.creditAppliedCents ? (rc.creditAppliedCents >= rc.totalCents ? 'Platform credit' : `${rc.card} + platform credit`) : rc.card || 'n/a'],
-      ['Payment status', rc.paymentStatus],
-      ['Charged to card', money(rc.amountChargedCents)],
-      ['Transaction ID', rc.paymentRef || 'n/a'],
-    ];
-    pay.forEach(([k, v], i) => {
-      const px = L + 14 + (i % 2) * (W / 2);
-      const py = y + 28 + Math.floor(i / 2) * 22;
-      doc.font('regular').fontSize(9).fillColor(MUTED).text(`${k}: `, px, py, { continued: true });
-      doc.font('medium').fillColor(INK).text(v, { width: W / 2 - 24 });
-    });
-    y += 96;
-
-    if (rc.refunds.length) {
-      label(doc, 'REFUNDS', L, y);
-      y += 14;
-      for (const f of rc.refunds) {
-        doc.font('medium').fontSize(9.5).fillColor(GREEN).text(`${money(f.amountCents)} to ${f.to}`, L, y, { width: W });
-        y += 13;
-        doc.font('regular').fontSize(8.5).fillColor(MUTED).text(`${f.atText} · ${f.reason}`, L, y, { width: W });
-        y += 16;
-      }
-      y += 6;
-    }
-
-    if (rc.pin) {
-      doc.roundedRect(L, y, W, 40, 8).fill('#ecfdf5');
-      doc.font('regular').fontSize(10).fillColor(INK).text('Pickup PIN: show at the counter', L + 14, y + 14);
-      doc.font('head').fontSize(18).fillColor(GREEN).text(rc.pin.split('').join(' '), L, y + 10, { width: W - 14, align: 'right' });
-      y += 56;
-    }
-
-    doc.font('regular').fontSize(8.5).fillColor(MUTED).text(
-      'Thank you for rescuing food with BiteBack! Your card is authorized when you order and charged only when the restaurant confirms pickup with your PIN. '
-      + 'Orders not picked up are released without charge. Times shown in Pacific Time. Questions? Reply to your order email or contact support@biteback.app.',
-      L, y, { width: W, lineGap: 2 },
-    );
+    drawPosReceipt(doc, rc);
     return finish(doc);
   }
 
@@ -419,6 +308,9 @@ function fonts(doc) {
   doc.registerFont('medium', FONTS.medium);
   doc.registerFont('bold', FONTS.bold);
   doc.registerFont('head', FONTS.head);
+  doc.registerFont('mono', FONTS.mono);
+  doc.registerFont('monoMedium', FONTS.monoMedium);
+  doc.registerFont('monoBold', FONTS.monoBold);
 }
 
 function label(doc, text, x, y, opts = {}) {
@@ -427,6 +319,145 @@ function label(doc, text, x, y, opts = {}) {
 
 function rule(doc, x1, x2, y) {
   doc.moveTo(x1, y).lineTo(x2, y).lineWidth(1).strokeColor(LINE).stroke();
+}
+
+// Draws the thermal-style receipt in black ink and returns the y position where it ends.
+function drawPosReceipt(doc, rc) {
+  const L = ROLL_MARGIN;
+  const R = ROLL_WIDTH - ROLL_MARGIN;
+  const W = R - L;
+  const it = rc.item;
+  let y = ROLL_MARGIN + 4;
+
+  const center = (text, font, size, opts = {}) => {
+    doc.font(font).fontSize(size).fillColor(opts.color || '#000');
+    doc.text(text, L, y, { width: W, align: 'center', lineGap: 1, characterSpacing: opts.spacing || 0 });
+    y = doc.y + (opts.after ?? 2);
+  };
+  const dashes = (gap = 7) => {
+    y += gap - 4;
+    doc.moveTo(L, y).lineTo(R, y).lineWidth(0.7).dash(2.2, { space: 1.8 }).strokeColor('#000').stroke().undash();
+    y += gap;
+  };
+  const double = () => {
+    y += 3;
+    doc.moveTo(L, y).lineTo(R, y).moveTo(L, y + 2).lineTo(R, y + 2).lineWidth(0.6).strokeColor('#000').stroke();
+    y += 8;
+  };
+  // Label on the left (wraps), amount on the right.
+  const row = (left, right, opts = {}) => {
+    const size = opts.size || 8;
+    doc.font(opts.bold ? 'monoBold' : 'mono').fontSize(size).fillColor('#000');
+    const rw = right ? doc.widthOfString(right) : 0;
+    const lw = W - rw - 8;
+    doc.text(left, L + (opts.indent || 0), y, { width: lw - (opts.indent || 0), lineGap: 0.5 });
+    const endY = doc.y;
+    if (right) {
+      doc.text(right, R - rw, y, { width: rw + 1, lineBreak: false });
+      if (opts.strikeRight) doc.moveTo(R - rw, y + size * 0.62).lineTo(R, y + size * 0.62).lineWidth(0.7).strokeColor('#000').stroke();
+    }
+    y = Math.max(endY, y + size * 1.3) + (opts.after ?? 1.5);
+  };
+  const small = (text, opts = {}) => {
+    doc.font('mono').fontSize(opts.size || 6.8).fillColor('#000');
+    doc.text(text, L + (opts.indent || 0), y, { width: W - (opts.indent || 0), align: opts.align || 'left', lineGap: 0.5 });
+    y = doc.y + (opts.after ?? 1.5);
+  };
+
+  // Header: logo, restaurant, address.
+  const logoW = 118;
+  doc.image(LOGO, L + (W - logoW) / 2, y, { width: logoW });
+  y += logoW * (400 / 1366) + 4;
+  center('RESCUED FOOD · GREATER SEATTLE', 'mono', 6.2, { spacing: 0.4, after: 7 });
+  center(rc.restaurant.name.toUpperCase(), 'monoBold', 9.5, { after: 1 });
+  center(`${rc.restaurant.address}\n${rc.restaurant.city}, WA ${rc.restaurant.zip}${rc.restaurant.phone ? `\nTel ${rc.restaurant.phone}` : ''}`, 'mono', 7.2, { after: 2 });
+  dashes();
+
+  // Order facts.
+  row('RECEIPT', rc.receiptNumber);
+  row('ORDER #', String(rc.orderId));
+  row('ORDERED', rc.orderedAtText);
+  if (rc.status === 'picked_up') row('PICKED UP', rc.pickedUpAtText);
+  else row('PICK UP BY', rc.pickupByText);
+  row('CUSTOMER', rc.customer.username);
+  row('STATUS', rc.statusLabel.toUpperCase(), { bold: true });
+  dashes();
+
+  // Item line.
+  row(`${it.quantity} x ${it.title}`, money(it.lineTotalCents), { bold: true, size: 8.4, after: 1 });
+  row(`@ ${money(it.unitPriceCents)} ea  (-${it.discountPct}%)`, money(it.lineOriginalCents), { indent: 12, size: 7.2, strikeRight: true, after: 0 });
+  small(`Reg. ${money(it.originalUnitCents)} ea, you save ${money(it.savingsCents)}`, { indent: 12, size: 6.6 });
+  dashes();
+
+  // Totals.
+  row('MENU VALUE', money(it.lineOriginalCents));
+  row(`DISCOUNT ${it.discountPct}%`, money(-it.savingsCents));
+  row('SUBTOTAL', money(rc.subtotalCents));
+  row(`SERVICE FEE ${rc.serviceFeePct}%`, money(rc.serviceFeeCents));
+  row(`WA SALES TAX ${pctText(rc.taxRateBps)}`, money(rc.taxCents));
+  double();
+  row('TOTAL', money(rc.totalCents), { bold: true, size: 11.5, after: 3 });
+  if (rc.creditAppliedCents) {
+    row('PLATFORM CREDIT', money(-rc.creditAppliedCents));
+    row('BALANCE TO CARD', money(rc.totalCents - rc.creditAppliedCents), { bold: true });
+  }
+  dashes();
+
+  // Payment.
+  const paidWith = rc.creditAppliedCents
+    ? (rc.creditAppliedCents >= rc.totalCents ? 'Platform credit' : `${rc.card} + credit`)
+    : rc.card || 'n/a';
+  row('PAID WITH', paidWith);
+  row('CHARGED', money(rc.amountChargedCents), { bold: true });
+  small(`PAYMENT: ${rc.paymentStatus}`);
+  small(`TXN ID: ${rc.paymentRef || 'n/a'}`);
+
+  if (rc.refunds.length) {
+    dashes();
+    center('*** REFUNDS ***', 'monoBold', 8, { after: 3 });
+    for (const f of rc.refunds) {
+      row('REFUND', money(-f.amountCents), { bold: true, after: 0.5 });
+      small(`To ${f.to}`, { indent: 8 });
+      small(`${f.atText} · ${f.reason}`, { indent: 8, after: 3 });
+    }
+  }
+  dashes();
+
+  // Savings banner, printed white on black like a thermal "reverse" line.
+  doc.rect(L, y, W, 17).fill('#000');
+  doc.font('monoBold').fontSize(8).fillColor('#fff')
+    .text(`YOU SAVED ${money(it.savingsCents)} TODAY!`, L, y + 4.5, { width: W, align: 'center', lineBreak: false });
+  y += 23;
+  center(`${it.quantity === 1 ? '1 meal' : `${it.quantity} meals`} rescued from going to waste`, 'mono', 6.8, { after: 4 });
+
+  if (rc.pin) {
+    dashes();
+    center('PICKUP PIN', 'monoBold', 7.5, { spacing: 1, after: 3 });
+    doc.rect(L + W / 2 - 58, y, 116, 30).lineWidth(1.2).strokeColor('#000').stroke();
+    doc.font('monoBold').fontSize(19).fillColor('#000')
+      .text(rc.pin.split('').join(' '), L, y + 6, { width: W, align: 'center', lineBreak: false });
+    y += 36;
+    center('Show this PIN at the counter', 'mono', 6.8, { after: 2 });
+  }
+  dashes();
+
+  // Barcode of the receipt number.
+  const bars = rc.barcode || code128(rc.receiptNumber);
+  const modules = bars.reduce((a, b) => a + b, 0);
+  const mw = Math.min(1.1, (W - 16) / modules);
+  let bx = L + (W - modules * mw) / 2;
+  bars.forEach((w, i) => {
+    if (i % 2 === 0) doc.rect(bx, y, w * mw, 30).fill('#000');
+    bx += w * mw;
+  });
+  y += 33;
+  center(rc.receiptNumber, 'mono', 7, { spacing: 1.2, after: 8 });
+
+  center('THANK YOU FOR RESCUING FOOD!', 'monoBold', 8, { after: 4 });
+  small('Your card is authorized when you order and charged only when the restaurant confirms pickup with your PIN. '
+    + 'Orders not picked up are released without charge. Times in Pacific Time.', { align: 'center', size: 6.2, after: 3 });
+  center('support@biteback.app', 'mono', 6.6, { after: 0 });
+  return y;
 }
 
 function finish(doc) {

@@ -85,11 +85,11 @@ function createOrderService({ db, config, payments }) {
       db.prepare('UPDATE offers SET quantity_available = quantity_available - ? WHERE id = ?').run(quantity, offer.id);
       const { lastInsertRowid } = db.prepare(`
         INSERT INTO orders (user_id, offer_id, restaurant_id, item_title, quantity, unit_price_cents, original_unit_price_cents,
-          discount_pct, subtotal_cents, service_fee_cents, tax_rate_bps, tax_cents, total_cents, pin, status, card_label, pickup_end,
+          discount_pct, subtotal_cents, service_fee_cents, service_fee_bps, tax_rate_bps, tax_cents, total_cents, pin, status, card_label, pickup_end,
           credit_applied_cents)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?, ?)`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?, ?)`)
         .run(userId, offer.id, offer.restaurant_id, offer.title, quantity, q.unitPriceCents, q.originalUnitCents, q.discountPct,
-          q.subtotalCents, q.serviceFeeCents, q.taxRateBps, q.taxCents, q.totalCents, uniquePin(offer.restaurant_id),
+          q.subtotalCents, q.serviceFeeCents, q.serviceFeeBps, q.taxRateBps, q.taxCents, q.totalCents, uniquePin(offer.restaurant_id),
           cardCents > 0 ? cardLabel : 'Platform credit', offer.pickup_end, creditCents);
       if (creditCents) credits.add(userId, -creditCents, 'redeem', { orderId: Number(lastInsertRowid), note: 'Applied to order' });
       return { order: getOrder.get(lastInsertRowid), offer };
