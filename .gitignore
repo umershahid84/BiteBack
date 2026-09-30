@@ -35,3 +35,6 @@ supabase/.temp
 
 # raw demo-video recordings
 /.video-tmp
+
+# Python bytecode (demo-video scripts)
+__pycache__/
