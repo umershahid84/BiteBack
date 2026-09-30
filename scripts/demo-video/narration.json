@@ -7,13 +7,13 @@
     { "id": "deals", "text": "You'll see live deals near you, with a countdown showing how long each one is available." },
     { "id": "search", "text": "Search by dish, restaurant, city, or ZIP code." },
     { "id": "quantity", "text": "Pick a deal, and choose how many you want." },
-    { "id": "total", "text": "You see the full total before you order: the food, a five percent service fee, and Washington sales tax." },
+    { "id": "total", "text": "You see the full total before you order: the food, a small service fee, and any applicable taxes." },
     { "id": "payment", "text": "Use your BiteBack credit, and pay the rest with a saved or new card." },
     { "id": "hold", "text": "Your card is only held for now. It's charged when you pick up your food." },
     { "id": "pin", "text": "Done! You get a four-digit PIN. Show it at the counter when you pick up." },
     { "id": "orders", "text": "Your orders and PINs are always under My orders." },
     { "id": "receipt", "text": "And every order comes with a receipt you can print or download." },
-    { "id": "end", "text": "BiteBack. Rescue great food, and save money." }
+    { "id": "end", "text": "That's BiteBack. Rescue great food, and save money. Happy rescuing!" }
   ],
   "restaurant": [
     { "id": "welcome", "text": "BiteBack helps restaurants turn surplus food into revenue, in under a minute." },
@@ -27,6 +27,6 @@
     { "id": "handover", "text": "Check the order and hand over the food. The customer's card is charged, and your share is paid to your Stripe account." },
     { "id": "payouts", "text": "The Payouts tab lists every payment, with its invoice number and transaction ID." },
     { "id": "report", "text": "And the daily report shows your sales, with print, PDF, and CSV downloads." },
-    { "id": "end", "text": "BiteBack. Less waste, more revenue." }
+    { "id": "end", "text": "That's BiteBack. Less waste, and more revenue. Happy selling!" }
   ]
 }

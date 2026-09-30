@@ -35,7 +35,7 @@ BiteBack is a marketplace where restaurants in greater Seattle sell food that wo
 5. **Payouts tab:** connect Stripe (Express onboarding), see earnings and every transfer with its system-assigned **invoice number** and Stripe transaction ID.
 6. **Daily report:** sales, meals rescued, discounts, tax and every order for any day, with print, PDF and CSV.
 
-**Demo videos:** short narrated walkthroughs (voice-over, with optional subtitles) for customers and restaurants play on the home page ("See it in action"), behind **How it works** on the deals page and **Watch the tour** on the restaurant dashboard. They live in `public/videos/`; see `scripts/demo-video/README.md` to change the narration or re-record them.
+**Demo videos:** short narrated walkthroughs (voice-over and light background music, with optional subtitles) for customers and restaurants play on the home page ("See it in action"), behind **How it works** on the deals page and **Watch the tour** on the restaurant dashboard. They live in `public/videos/`; see `scripts/demo-video/README.md` to change the narration or re-record them.
 
 **Owner console (`/admin`)**: overview with revenue and a daily chart, restaurant approvals and suspensions, customers (suspend, issue goodwill credit), orders (cancel, **refund by 10/25/50/75/100% or a set amount, to the original payment or as platform credit**, receipt PDF, CSV), live offer moderation, payouts (send what's owed through Stripe or record a manual payout, with a locked invoice number and bank/transaction details), sales tax by location (CSV for the WA excise tax return), settings (service fee, default tax, approval) and an audit log of every admin action.
 
@@ -97,6 +97,33 @@ npm run create-admin -- --email you@yourcompany.com --username owner
 ```
 
 Other commands: `npm run lint`, `npm run typecheck`, `npm test` (unit + integration; integration tests need `db:start`, and the Stripe checks need `docker run -d -p 12111:12111 stripe/stripe-mock`), `npm run db:reset` (fresh database), `npm run db:types` (regenerate `src/lib/database.types.ts` after changing migrations), `npm run build`.
+
+## Keep it running on your own server (systemd)
+
+`npm start` stops when the terminal that started it closes (for example when you close VS Code). On a Linux server, install BiteBack as a **systemd service** instead: it keeps running after you log out, restarts itself if it crashes, and starts when the server boots.
+
+**One-time setup** (from the app folder, as your normal user, with `.env.local` filled in):
+
+```bash
+npm run service:install        # asks for your sudo password; builds the app the first time
+sudo systemctl start biteback
+```
+
+The installer uses your user account and your Node.js (nvm works), and serves on port 3000. Change it with `npm run service:install -- --port 8080`; running the installer again updates the service.
+
+| To... | Run |
+|---|---|
+| Start / stop / restart | `sudo systemctl start biteback` / `stop` / `restart` |
+| See if it's running | `systemctl status biteback` |
+| Follow the logs | `sudo journalctl -u biteback -f` |
+| Turn off starting at boot | `sudo systemctl disable biteback` |
+| **Deploy the latest code** | `npm run update` |
+
+**`npm run update`** pulls the latest code, runs `npm ci` if packages changed, and builds the new version **while the site keeps running**. Then it swaps the new build in and restarts, so the site is down for about a second. If the new version doesn't answer, the previous one is put back automatically. If nothing new was pushed, it says so and does nothing. When an update includes database migrations, it reminds you to run `npx supabase db push`.
+
+Don't run `npm start` or `npm run build` in the same folder while the service is running: that would replace the build it is serving. Use `npm run dev` for development, `npm run update` to deploy.
+
+systemd is Linux-only. On Windows, use WSL 2 with systemd turned on, or run the app on a Linux server or VM.
 
 ## Deploy
 

@@ -3,6 +3,9 @@ node_modules/
 
 # Next.js
 /.next/
+/.next-build/
+/.next-old/
+/.next-failed/
 /out/
 /build
 next-env.d.ts
@@ -32,3 +35,6 @@ supabase/.temp
 
 # raw demo-video recordings
 /.video-tmp
+
+# Python bytecode (demo-video scripts)
+__pycache__/

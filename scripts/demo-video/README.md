@@ -1,6 +1,6 @@
 # Demo videos
 
-The narrated tours in `public/videos/` (home page, **How it works** on the deals page, **Watch the tour** on the restaurant dashboard) are recorded from the real app. The voice-over is generated with [Kokoro](https://github.com/thewh1teagle/kokoro-onnx), an open-source text-to-speech model (Apache 2.0) that runs on your own computer.
+The narrated tours in `public/videos/` (home page, **How it works** on the deals page, **Watch the tour** on the restaurant dashboard) are recorded from the real app and end on an animated BiteBack logo ("Happy rescuing!" / "Happy selling!"). The voice-over is generated with [Kokoro](https://github.com/thewh1teagle/kokoro-onnx), an open-source text-to-speech model (Apache 2.0) that runs on your own computer. The light background music is composed in code by `music.py` (original, no samples or licences needed) and dips automatically while the narrator speaks.
 
 To change what is said, edit `narration.json`, then rebuild:
 
@@ -14,10 +14,15 @@ npm run db:reset && npm run seed      # fresh demo data
 npm run dev                           # in another terminal
 node scripts/demo-video/record.mjs    # → .video-tmp/*-raw.webm, *-cues.json
 
-# 3. Mix and encode (ffmpeg with libx264, libvpx-vp9 and libopus)
+# 3. Background music, fitted to each recording (numpy + soundfile, installed in step 1)
+python scripts/demo-video/music.py    # → .video-tmp/*-music.wav
+
+# 4. Mix and encode (ffmpeg with libx264, libvpx-vp9 and libopus)
 node scripts/demo-video/build.mjs     # → public/videos/*-tour.{mp4,webm,vtt,jpg}
 ```
 
 `build.mjs` prints each video's length; update `length` in `src/components/app/demo-video.tsx` if it changed. The `.vtt` files are optional subtitles (off by default in the player) with the same words as the voice-over. The bell in the restaurant tour is the dashboard's own order bell (`src/components/restaurant/bell.ts`), recreated in `voice.py`.
+
+The music's volume is `MUSIC_GAIN` in `build.mjs`; its tempo, chords and melody are at the top of `music.py`. The end screen's wording is `OUTRO` in `record.mjs`.
 
 Voice and speed are set at the top of `narration.json` (`af_heart` is a US English voice; others include `af_bella`, `am_michael` and `bf_emma`).
