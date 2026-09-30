@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 
 const STEPS = [
   ['🔎', 'Browse nearby deals', 'Discounted meals from restaurants around you, with pickup times and how many are left.'],
-  ['🧾', 'See the full total', 'Food, 5% service fee and WA sales tax are all shown before you order. No surprises.'],
+  ['🧾', 'See the full total', 'Food, a small service fee and any applicable taxes are all shown before you order. No surprises.'],
   ['🔢', 'Get your PIN', 'We place a hold on your card and give you a 4-digit PIN to show at the counter.'],
   ['🥡', 'Pick up & enjoy', 'The restaurant enters your PIN. Only then is your card charged.'],
 ];

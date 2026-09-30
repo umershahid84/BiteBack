@@ -10,6 +10,7 @@ import { chromium } from 'playwright';
 const BASE = process.env.DEMO_URL ?? 'http://localhost:3000';
 const OUT = path.resolve('.video-tmp');
 const DURATIONS = JSON.parse(fs.readFileSync(path.join(OUT, 'voice/durations.json'), 'utf8'));
+const LOGO = fs.readFileSync(new URL('../../public/assets/logo-dark.svg', import.meta.url), 'utf8');
 const SIZE = { width: 1280, height: 720 };
 const PASSWORD = 'BiteBack123';
 fs.mkdirSync(OUT, { recursive: true });
@@ -81,10 +82,82 @@ function narrator(tour) {
     sound(id) {
       cues.push({ id, at: at(), sound: true });
     },
+    // A moment the music follows (e.g. the end screen), with no sound of its own.
+    mark(id) {
+      cues.push({ id, at: at(), marker: true });
+    },
     save() {
+      this.mark('finish');
       fs.writeFileSync(path.join(OUT, `${tour}-cues.json`), JSON.stringify(cues, null, 2));
     },
   };
+}
+
+// End screen: fades in over the last page, pops in the BiteBack logo piece by piece and says goodbye.
+const OUTRO = {
+  customer: { headline: 'Happy rescuing!', line: 'Great food. Great prices. Less waste.', pill: 'Free to join · Greater Seattle' },
+  restaurant: { headline: 'Happy selling!', line: 'Less waste. More revenue.', pill: 'Free to join · Paid through Stripe' },
+};
+
+async function showOutro(p, n, tour) {
+  await p.evaluate(({ logo, text }) => {
+    const css = `
+      #bb-cursor { display: none !important; }
+      #bb-outro { position: fixed; inset: 0; z-index: 2147483000; display: grid; place-items: center; overflow: hidden;
+        background: radial-gradient(620px 420px at 18% 22%, rgba(52,211,153,.28), transparent 70%),
+          radial-gradient(560px 380px at 85% 80%, rgba(253,224,71,.20), transparent 70%), #04130d;
+        font-family: var(--font-jakarta), var(--font-inter), system-ui, sans-serif; color: #ecfdf5;
+        animation: o-fade .7s ease-out both; }
+      @keyframes o-fade { from { opacity: 0 } to { opacity: 1 } }
+      #bb-outro .stage { position: relative; z-index: 1; display: grid; justify-items: center; text-align: center; }
+      #bb-outro .logo { position: relative; width: 600px; animation: o-bob 3s ease-in-out 2.4s infinite; }
+      #bb-outro .logo svg { display: block; width: 100%; height: auto; overflow: visible; }
+      #bb-outro svg > rect, #bb-outro svg > g, #bb-outro svg > path, #bb-outro svg g > path { transform-box: fill-box; }
+      #bb-outro svg > rect { transform-origin: center; animation: o-pop .9s cubic-bezier(.34,1.56,.64,1) .35s both; }
+      #bb-outro svg > g { transform-origin: center; animation: o-in .5s ease-out .75s both; }
+      #bb-outro svg g > path:nth-of-type(1) { transform-origin: 0% 100%; animation: o-leaf 1.1s cubic-bezier(.34,1.56,.64,1) 1s both; }
+      #bb-outro svg g > path:nth-of-type(2) { animation: o-fadein .4s ease-out 1.5s both; }
+      #bb-outro svg > path:nth-of-type(1) { animation: o-slide .6s cubic-bezier(.2,.8,.2,1) .95s both; }
+      #bb-outro svg > path:nth-of-type(2) { animation: o-slide .6s cubic-bezier(.2,.8,.2,1) 1.1s both; }
+      #bb-outro svg > path:nth-of-type(3) { animation: o-fadein .6s ease-out 1.45s both; }
+      @keyframes o-pop { from { transform: scale(0) rotate(-30deg); opacity: 0 } 60% { opacity: 1 } to { transform: scale(1) rotate(0); opacity: 1 } }
+      @keyframes o-in { from { transform: scale(.4); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+      @keyframes o-leaf { 0% { transform: scale(0) rotate(-40deg) } 55% { transform: scale(1.12) rotate(10deg) }
+        75% { transform: scale(.96) rotate(-6deg) } 100% { transform: scale(1) rotate(0) } }
+      @keyframes o-slide { from { transform: translateX(-40px); opacity: 0 } to { transform: none; opacity: 1 } }
+      @keyframes o-fadein { from { opacity: 0 } to { opacity: 1 } }
+      @keyframes o-bob { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
+      #bb-outro .shine { position: absolute; left: 0; top: 0; width: 176px; height: 176px; border-radius: 46px; overflow: hidden; pointer-events: none; }
+      #bb-outro .shine::after { content: ''; position: absolute; inset: -40%; transform: translateX(-120%) rotate(25deg);
+        background: linear-gradient(90deg, transparent 35%, rgba(255,255,255,.55) 50%, transparent 65%); animation: o-shine 1.1s ease-in-out 1.9s both; }
+      @keyframes o-shine { from { transform: translateX(-120%) rotate(25deg) } to { transform: translateX(120%) rotate(25deg) } }
+      #bb-outro .burst i { position: absolute; left: 88px; top: 88px; width: 10px; height: 10px; margin: -5px; border-radius: 50%;
+        opacity: 0; animation: o-burst .9s ease-out .55s both; }
+      @keyframes o-burst { 0% { opacity: 1; transform: rotate(var(--a)) translateX(0) scale(1) }
+        100% { opacity: 0; transform: rotate(var(--a)) translateX(150px) scale(.4) } }
+      #bb-outro h2 { margin: 40px 0 0; font-size: 76px; font-weight: 800; letter-spacing: -.03em; line-height: 1.05; padding-bottom: .12em;
+        background: linear-gradient(90deg, #6ee7b7, #fde047); -webkit-background-clip: text; background-clip: text; color: transparent;
+        animation: o-rise .8s cubic-bezier(.2,.8,.2,1) 1.7s both; }
+      #bb-outro p { margin: 14px 0 0; font-size: 28px; font-weight: 600; color: #a7f3d0; animation: o-rise .7s cubic-bezier(.2,.8,.2,1) 2.1s both; }
+      #bb-outro .pill { margin-top: 26px; padding: 10px 22px; border-radius: 999px; border: 1px solid rgba(110,231,183,.4);
+        background: rgba(16,185,129,.12); font: 700 20px var(--font-inter), system-ui, sans-serif; color: #d1fae5;
+        animation: o-rise .7s cubic-bezier(.2,.8,.2,1) 2.45s both; }
+      @keyframes o-rise { from { transform: translateY(26px); opacity: 0 } to { transform: none; opacity: 1 } }
+      #bb-outro .float { position: absolute; bottom: -60px; font-size: var(--s); opacity: 0; animation: o-float var(--d) linear var(--w) infinite; }
+      @keyframes o-float { 0% { transform: translateY(0) rotate(0); opacity: 0 } 15% { opacity: .55 } 85% { opacity: .45 }
+        100% { transform: translateY(-860px) rotate(var(--r)); opacity: 0 } }`;
+    const el = document.createElement('div');
+    el.id = 'bb-outro';
+    const foods = ['🍜', '🥐', '🌮', '🍕', '🍣', '🥗', '🍱', '🌱', '🥟', '🍩', '🌱', '🥖', '🍛', '🌿'];
+    // Down both sides, clear of the logo and text in the middle.
+    const floats = foods.map((f, i) => `<span class="float" style="left:${i % 2 ? 80 + ((i * 5) % 17) : 2 + ((i * 5) % 17)}%;--s:${26 + ((i * 7) % 18)}px;--d:${6 + (i % 4)}s;--w:${(i * 0.37) % 2.2}s;--r:${i % 2 ? 40 : -40}deg">${f}</span>`).join('');
+    const colors = ['#34d399', '#fde047', '#6ee7b7', '#f59e0b'];
+    const burst = Array.from({ length: 12 }, (_, i) => `<i style="--a:${i * 30}deg;background:${colors[i % 4]}"></i>`).join('');
+    el.innerHTML = `<style>${css}</style>${floats}<div class="stage"><div class="logo">${logo}<div class="shine"></div><div class="burst">${burst}</div></div>
+      <h2>${text.headline}</h2><p>${text.line}</p><div class="pill">${text.pill}</div></div>`;
+    document.body.append(el);
+  }, { logo: LOGO, text: OUTRO[tour] });
+  n.mark('outro');
 }
 
 // Moves the visible pointer to an element (smoothly), then clicks it.
@@ -177,8 +250,11 @@ async function customerTour(browser) {
   await n.say(p, 'receipt');
   await wait(p, 1000);
   await scrollBy(p, 600, 24);
-  await n.say(p, 'end');
-  await n.idle(p, 1200);
+  await n.idle(p, 400);
+  await showOutro(p, n, 'customer');
+  await wait(p, 1400);
+  await n.say(p, 'end', { gap: 0 });
+  await n.idle(p, 2600);
   n.save();
   await ctx.close();
   return p;
@@ -264,8 +340,11 @@ async function restaurantTour(browser) {
   await click(p, 'a:has-text("Daily report")');
   await p.waitForSelector('text=Daily sales report');
   await n.say(p, 'report', { gap: 0 });
-  await n.say(p, 'end');
-  await n.idle(p, 1200);
+  await n.idle(p, 400);
+  await showOutro(p, n, 'restaurant');
+  await wait(p, 1400);
+  await n.say(p, 'end', { gap: 0 });
+  await n.idle(p, 2600);
   n.save();
   await ctx.close();
   return p;

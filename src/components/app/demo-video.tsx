@@ -10,13 +10,13 @@ import { cn } from '@/lib/utils';
 export const TOURS = {
   customer: {
     title: 'How BiteBack works for customers',
-    length: '1:00',
+    length: '1:07',
     src: '/videos/customer-tour',
     steps: ['Browse live deals near you', 'See the full total before you order', 'Your card is held, not charged', 'Show your 4-digit PIN at pickup'],
   },
   restaurant: {
     title: 'How BiteBack works for restaurants',
-    length: '0:59',
+    length: '1:05',
     src: '/videos/restaurant-tour',
     steps: ['Post surplus food in under a minute', 'A bell rings when someone orders', 'Type the PIN and hand over the food', 'Get paid through Stripe, with reports'],
   },
