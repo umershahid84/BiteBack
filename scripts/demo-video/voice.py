@@ -8,6 +8,7 @@ Writes .video-tmp/voice/<tour>-<id>.wav, bell.wav and durations.json (seconds pe
 """
 import json
 import pathlib
+import re
 import sys
 
 import numpy as np
@@ -31,6 +32,14 @@ def bell():
     return (out / np.abs(out).max() * 0.5).astype(np.float32)
 
 
+def spoken(text, pronounce):
+    """Applies narration.json's "pronounce" list, so words like PIN are said as words, not spelled out.
+    Only the voice uses this; the subtitles keep the written form."""
+    for written, said in pronounce.items():
+        text = re.sub(rf'\b{re.escape(written)}\b', said, text)
+    return text
+
+
 def main(model, voices):
     script = json.loads((HERE / 'narration.json').read_text())
     OUT.mkdir(parents=True, exist_ok=True)
@@ -38,7 +47,7 @@ def main(model, voices):
     durations = {}
     for tour in ('customer', 'restaurant'):
         for line in script[tour]:
-            samples, rate = kokoro.create(line['text'], voice=script['voice'], speed=script['speed'], lang='en-us')
+            samples, rate = kokoro.create(spoken(line['text'], script.get('pronounce', {})), voice=script['voice'], speed=script['speed'], lang='en-us')
             sf.write(OUT / f"{tour}-{line['id']}.wav", samples, rate)
             durations[f"{tour}-{line['id']}"] = round(len(samples) / rate, 3)
             print(f"{tour}-{line['id']}: {durations[tour + '-' + line['id']]}s")
