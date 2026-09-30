@@ -1,6 +1,7 @@
 {
   "voice": "af_heart",
   "speed": 1.0,
+  "pronounce": { "ZIP": "zip", "PINs": "pins", "PIN": "pin" },
   "customer": [
     { "id": "welcome", "text": "Welcome to BiteBack! Local restaurants post their surplus food, like wrong orders and end-of-day extras, at up to seventy percent off." },
     { "id": "login", "text": "Create a free account, then log in with your email or user name." },

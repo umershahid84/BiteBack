@@ -25,4 +25,4 @@ node scripts/demo-video/build.mjs     # → public/videos/*-tour.{mp4,webm,vtt,j
 
 The music's volume is `MUSIC_GAIN` in `build.mjs`; its tempo, chords and melody are at the top of `music.py`. The end screen's wording is `OUTRO` in `record.mjs`.
 
-Voice and speed are set at the top of `narration.json` (`af_heart` is a US English voice; others include `af_bella`, `am_michael` and `bf_emma`).
+Words the voice would spell out letter by letter (it reads capitals as abbreviations) go in `pronounce` in `narration.json`: `"PIN": "pin"` makes it say the word, while the subtitles keep "PIN". Voice and speed are set at the top of `narration.json` (`af_heart` is a US English voice; others include `af_bella`, `am_michael` and `bf_emma`).
